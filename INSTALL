@@ -1,0 +1,44 @@
+*****************************************************************************
+Requirements
+
+A minimal requirement to install DoSPT is access to a Fortran compiler and
+a C++ compiler. "gfortran" and "g++" have been tested to work reliably. If
+you are using those compilers and still experince any problems it could be
+down to a version issue. Compilation was successfully carried out with
+at least gfortran 4.8.4 and g++ 4.8.4 on Ubuntu 14.04.
+*****************************************************************************
+
+
+
+*****************************************************************************
+Note on parallel support
+
+Very basic parallelization is available through OpenMP functionality. If
+it becomes problematic for you, try removing the "-openmp" flag from the
+"build.sh" file.
+*****************************************************************************
+
+
+
+*****************************************************************************
+Installation
+
+The installation process is rather rudimentary at the moment. For a quick
+and dirty installation simply execute the "build.sh" script:
+
+./build.sh
+
+This will compile dfftpack, Voro++ and DoSPT. By default, a directory named
+"bin" will be created at the same directory level as this README file with
+the DoSPT executable inside. You can add it to your path by adding this
+line to your .bashrc file:
+
+PATH="/wherever/you/installed/DoSPT/bin/:$PATH"
+
+To have immediate access to DoSPT simply execute "source ~/.bashrc" in a
+terminal. DoSPT will then be available as a command, simply type "DoSPT".
+
+Several options, including compiler choice and compiler optimization,
+directories, etc., can be changed by editing the "build.sh" file before
+executing it.
+*****************************************************************************

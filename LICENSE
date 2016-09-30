@@ -1,0 +1,29 @@
+*****************************************************************************
+DoSPT has been written by Miguel A. Caro in the period 2015-2016 during his
+employment at Aalto University.
+DoSPT is provided for free, in the hope that it will be useful, but with no
+warranty whatsoever, under the Creative Commons Attribution-NonCommercial-
+ShareAlike license: http://creativecommons.org/licenses/by-nc-sa/3.0/.
+If you want to use DoSPT for commercial purposes please contact M.A. Caro
+at mcaroba@gmail.com.
+
+
+Important notice:
+
+DoSPT is shipped with and links to other codes that may be copyright of their
+respective authors. These codes are rightfully distributed (for the user's
+convenience) in accordance with their terms of usage:
+
+* dfftpack, a double-precision clone of FFTPACK (public domain, see README
+  in src/dfftpack/. Original routine by P.N. Swarztrauber, clone by H.C.
+  Pumphrey)
+
+* Voro++ (written by Chris Rycroft, see LICENSE in src/voro++/voro++-0.4.6/)
+
+* LOWESS subroutine (src/lowess.f, by W.S. Cleveland, is open source with
+  no restrictions. The distributed version was taken from T.C. Beers
+  -with modifications- with permission)
+
+* Codes in src/misc.f90 have been adapted by Miguel A. Caro but were
+  originally written by others. See file for details.
+*****************************************************************************
