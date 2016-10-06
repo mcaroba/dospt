@@ -1,0 +1,28 @@
+module good_bye
+
+  use read_input
+
+  implicit none
+
+  contains
+
+  subroutine print_good_bye()
+  goto execution_error
+!******************************************************
+! Print message at the end depending on execution
+! success
+97 write(*,*)'                                       |'
+   write(*,*)'Program successfully executed          |'
+   write(*,*)'                                       |'
+   write(*,*)'End of execution:                      |'
+   call timestring(time)
+   write(*,'(1X,A39,A)')time,'|'
+   goto 99
+98 write(*,*)'                                       |'
+   write(*,*)'Program could not be executed          |'
+   write(*,*)'Check for errors                       |'
+99 write(*,*)'_______________________________________/'
+!******************************************************
+  end subroutine
+
+end module

@@ -1,7 +1,7 @@
 ! Various utility subroutines used by the main code. They're used for
 ! info printing purposes mostly. These subroutines do not require an
 ! explicit interface.
-! These routines where adapted but *not* originally written by
+! These routines where adpated but *not* originally written by
 ! Miguel A. Caro.
 
 

@@ -143,7 +143,11 @@ subroutine restore_replica(L, r, natoms_in_group)
   integer, intent(in) :: natoms_in_group
 end subroutine
 
-
+subroutine sort_supergroups(ngroups, nsupergroups, ngroups_in_supergroup, group_in_supergroup)
+  integer, intent(in) :: ngroups
+  integer, intent(out) :: nsupergroups
+  integer, allocatable, intent(out) :: ngroups_in_supergroup(:), group_in_supergroup(:,:)
+end subroutine
 
 subroutine read_trajectory(n, natoms, tau, L, mode, positions, velocities, estimate_vel, error, &
                            m, nmasses, mass_types, mass_types_values, volumes, volumes_temp)
