@@ -80,7 +80,7 @@ program DOSPT
   integer :: n_particles
   real*8, allocatable :: mp(:), rp(:,:), vp(:,:)
   real*4, allocatable :: v_rot(:,:,:), v_cm(:,:,:), v_vib(:,:,:)
-  real*4, allocatable :: w(:,:,:), rxv(:,:,:), volumes(:,:), dist(:,:)
+  real*4, allocatable :: w(:,:,:), eig_group_inst(:,:,:), rxv(:,:,:), volumes(:,:), dist(:,:), e_kin_tot(:), e_kin(:,:)
   real*8, allocatable :: v_rot_group(:,:), v_cm_group(:), v_vib_group(:,:)
   real*8, allocatable :: w_group(:), rxv_group(:,:), volume_group(:), dist_group(:)
   real*8, allocatable :: x(:), y(:), z(:), volumes_temp(:)
@@ -198,7 +198,7 @@ end interface
 ! Constants and units initialization (constants.f90)
   call initialize_constants()
 
-! Read in options, print welcome, etc. (read_input.f90)
+! Print welcome and read in all input files except for trajectory (read_input.f90)
   call print_welcome_and_read_input()
 
 !
@@ -248,6 +248,8 @@ end interface
   eig_group = 0.d0
 ! These for groups
   allocate( w(1:ngroups, 1:3, 1:n) )
+!  allocate( eig_group_inst(1:ngroups, 1:3, 1:n) )
+  allocate( e_kin(1:3, 1:n) )
   allocate( volume_group(1:ngroups) )
   allocate( sigma_group(1:ngroups, 1:3) )
   allocate( delta_group(1:ngroups,1:3) )
@@ -274,6 +276,7 @@ end interface
   allocate( r(1:n) )
 !  allocate( rw(1:n) )
   allocate( velocities(1:natoms, 1:3, 1:n) )
+  allocate( e_kin_tot(1:n) )
   allocate( positions(1:natoms, 1:3, 1:n) )
   allocate( Stotal(1:(n+1)/2, 1:3) )
   allocate( m(1:natoms) )
@@ -385,6 +388,8 @@ end interface
       w(j, 1:3, i) = w_group(1:3)
 !     Calculate average principal moments of inertia (amu * nm^2)
       eig_group(j,1:3) = eig_group(j,1:3) + temp(1:3)/dfloat(n)
+!     and instantaneous ones
+!      eig_group_inst(j,1:3,i) = temp(1:3)
 !     Pass values to atoms
       do j2=1,natoms_in_group(j)
         do k=1,3
@@ -401,10 +406,38 @@ end interface
     deallocate(v_rot_group, v_cm_group, v_vib_group, w_group, rxv_group, dist_group)
   end do
   deallocate(positions)
-  deallocate(velocities)
   write(*,'(A4)')'=] |'
   write(*,*)'                                       |'
   write(*,*)'.......................................|'
+!******************************************************
+
+
+
+
+
+!******************************************************
+! Calculate kinetic energy at each point in the trajectory from the velocities
+! units are amu * nm^2 / ps^2, and we convert them to eV
+  e_kin = 0.
+  e_kin_tot = 0.
+  do j=1,natoms
+    do i=1,n
+      e_kin_tot(i) = e_kin_tot(i) + 0.5 * m(j) * dot_product(velocities(j,1:3,i), velocities(j,1:3,i))
+      e_kin(1,i) = e_kin(1,i) + 0.5 * m(j) * dot_product(v_cm(j,1:3,i), v_cm(j,1:3,i))
+      e_kin(2,i) = e_kin(2,i) + 0.5 * m(j) * dot_product(v_rot(j,1:3,i), v_rot(j,1:3,i))
+      e_kin(3,i) = e_kin(3,i) + 0.5 * m(j) * dot_product(v_vib(j,1:3,i), v_vib(j,1:3,i))
+    end do
+  end do
+  e_kin_tot = e_kin_tot * amu * nm**2 / ps**2 / eV
+  e_kin = e_kin * amu * nm**2 / ps**2 / eV
+  open(unit=10, file="e_kin", status="unknown")
+  do i=1,n
+    write(10,*) dfloat(i-1)/dfloat(n-1)*tau, e_kin_tot(i), e_kin(1:3,i)
+  end do
+  close(10)
+  deallocate(e_kin)
+  deallocate(e_kin_tot)
+  deallocate(velocities)
 !******************************************************
 
 

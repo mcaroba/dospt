@@ -71,11 +71,24 @@ flags="-fopenmp -std=legacy"
 #
 # Original DoSPT files written (mostly) by Miguel Caro
 #
-src="DoSPT.f90 misc.f90 read_trajectory.f90 fluidicity.f90 volume.f90"
+main="DoSPT.f90"
+subroutines="misc.f90 read_trajectory.f90 fluidicity.f90 volume.f90 sort_supergroups.f90"
+src="$main $subroutines"
+modules="constants.f90 read_input.f90 good_bye.f90"
 #
 # Add other files
 #
 src="$src voronoi.o lowess.f"
+#
+########################################################################
+
+
+
+########################################################################
+# Compile modules
+#
+gfortran -c $modules $subroutines
+modules=`echo $modules | sed 's/f90/o/g'`
 #
 ########################################################################
 
@@ -96,6 +109,6 @@ out="$outdir/DoSPT"
 ########################################################################
 # Compile DoSPT
 #
-gfortran $flags $src $libs -o $out
+gfortran $flags $src $libs $modules -o $out
 #
 ########################################################################
