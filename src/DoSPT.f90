@@ -586,7 +586,9 @@ end interface
             r(i2) = v_vib(atoms_in_group(j,j2), k, i)
           end if
         end do
-        if( lifetime(j) > 0 )then
+!       Ask for the lifetime to be at least 10 time steps before calculating DoS
+!       to prevent transitioning groups from messing things up. DoS = 0 otherwise
+        if( lifetime(j) > 10 )then
 !         Call FFT routine
 !         For groups which do not live for the whole dynamics, we use a different array
           if( lifetime(j) /= n )then
