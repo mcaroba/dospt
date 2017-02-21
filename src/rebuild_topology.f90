@@ -366,6 +366,9 @@ end interface
 
   end do
 
+  write(*,*)'                                       |'
+  write(*,*)'.......................................|'
+
 ! COMMENT THIS PRINTING OUT IN PUBLIC VERSION OF CODE
 !do i = 1,ngroups
 !write(*,*) i, group_belongs_to_supergroup(i), ngroups_in_supergroup(group_belongs_to_supergroup(i)), &

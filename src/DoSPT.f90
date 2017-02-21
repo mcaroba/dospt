@@ -298,6 +298,11 @@ end interface
   do i = 1, ngroups
     weight_group(i) = dfloat(lifetime(i)) / dfloat(n)
   end do
+! If the topology has not been rebuilt, then we return the nsupergroups variable to its original
+! state
+  if( .not. topology_has_changed )then
+    nsupergroups = size(ngroups_in_supergroup, 1)
+  end if
 !******************************************************
 
 
