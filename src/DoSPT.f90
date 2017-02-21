@@ -12,7 +12,7 @@ program DOSPT
 !    .MMM . MMMM=..MMM ..MMM7 ..  ..8MMM..MMM ...........MMM.....    !
 !    MMMMMMMMMM. .. MMMMMMM   MMMMMMMMD...MMM ..........MMM=....     !
 !                                                                    !
-!                            DoSPT v0.1                              !
+!                          DoSPT v0.1.1                              !
 !                                                                    !
 !  The following distribution of Fortran routines for thermodynamic  !
 !      properties calculation, collectively known as DoSPT, has      !
@@ -32,8 +32,10 @@ program DOSPT
 !   When publishing work that makes use of the present distribution  !
 !                   please have a look and cite                      !
 !                                                                    !
-!                      Miguel A. Caro et al.                         !
-!              [Implementation paper citation info]                  !
+!        Miguel A. Caro, Tomi Laurila and Olga Lopez-Acevedo         !
+!   "Accurate schemes for calculation of thermodynamic properties    !
+!      of liquid mixtures from molecular dynamics simulations"       !
+!              J. Chem. Phys. 145, 244504 (2016)                     !
 !                                                                    !
 ! For an in-depth account of the theory underlying the 2PT method    !
 !  method, please read (and cite, as appropriate) the original work: !
@@ -44,7 +46,7 @@ program DOSPT
 !                     of Lennard-Jones fluids"                       !
 !                 J. Chem. Phys. 119, 11792 (2003)                   !
 !                                                                    !
-!!!          Distribution last updated on 09 Sep. 2016             !!!
+!!!          Distribution last updated on 21 Feb. 2016             !!!
 !!!!!                                                            !!!!!
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -68,10 +70,10 @@ program DOSPT
 ! program execution
   implicit none
 
-  integer :: k, k2, k3, k4, n_volumes, Ng, Nsg, niter
-  real*8, allocatable :: wsave(:), r(:), rw(:)
+  integer :: k3, k4, n_volumes, Ng, niter, di_volumes, n_prev
+  real*8, allocatable :: wsave(:), r(:), rw(:), r2(:), Nsg
   real*4, allocatable :: velocities(:,:,:), positions(:,:,:)
-  real*8 :: temp(1:6), update_bar, res, D_rot_real, D_ideal, D_rot_ideal, sigma_eff
+  real*8 :: temp(1:6), update_bar, res, D_rot_real, D_ideal, D_rot_ideal, sigma_eff, ngroups_eff = 0.d0
   real*8 ::  nu_i(3), gas_integrand(3), solid_integrand(3), dos_subinterval(3), solid_weight(3), quadrature(3)
 
   real*8, allocatable :: Stotal(:,:), m(:)
@@ -83,23 +85,25 @@ program DOSPT
   real*4, allocatable :: w(:,:,:), eig_group_inst(:,:,:), rxv(:,:,:), volumes(:,:), dist(:,:), e_kin_tot(:), e_kin(:,:)
   real*8, allocatable :: v_rot_group(:,:), v_cm_group(:), v_vib_group(:,:)
   real*8, allocatable :: w_group(:), rxv_group(:,:), volume_group(:), dist_group(:)
-  real*8, allocatable :: x(:), y(:), z(:), volumes_temp(:)
+  real*8, allocatable :: x(:), y(:), z(:), volumes_temp(:), Sgroup(:,:,:)
 
   integer :: nparticles
   real*8, allocatable :: eig_group(:,:), symmetry_number_supergroup(:)
   character*16 :: mass_label
-  real*8, allocatable :: delta_group(:,:), degf_group(:,:), degf_supergroup(:,:)
-  real*8, allocatable :: f_group(:,:), f_supergroup(:,:), y_group(:,:), z_group(:,:)
+  character*16, allocatable :: species(:)
+  real*8, allocatable :: delta_group(:,:), degf_group(:,:), degf_supergroup(:,:), weight_group(:)
+  real*8, allocatable :: f_group(:,:), f_supergroup(:,:), y_group(:,:), z_group(:,:), mass_group(:)
   real*8, allocatable :: SHSbykB_group(:,:), SHSbykB_supergroup(:,:), SRbykB_group(:), SRbykB_supergroup(:)
   real*8, allocatable :: entropy_group(:,:), entropy_supergroup(:,:), entropy_supergroup_gas(:,:)
   real*8, allocatable :: entropy_supergroup_solid(:,:), degf_supergroup_gas(:,:), degf_supergroup_solid(:,:)
   real*8, allocatable :: entropy1PT_group(:,:), entropy1PT_supergroup(:,:), eig_supergroup(:,:)
   real*8 :: omega
 
-  integer, allocatable :: natoms_in_supergroup(:)
-  logical :: error = .false.
+  integer, allocatable :: birth_time(:), death_time(:), lifetime(:)
+  logical :: error = .false., topology_has_changed = .false., interpolate_dos = .false.
   real*8, allocatable :: Ssupergroup(:,:,:), mass_supergroup(:), volume_supergroup(:)
   real*8, allocatable :: delta_supergroup(:,:), y_supergroup(:,:), z_supergroup(:,:)
+  real*8, allocatable :: natoms_in_supergroup(:), ngroups_in_supergroup_eff(:)
 
 
 ! Filtering stuff must be single precision
@@ -143,14 +147,13 @@ subroutine restore_replica(L, r, natoms_in_group)
   integer, intent(in) :: natoms_in_group
 end subroutine
 
-
-
 subroutine read_trajectory(n, natoms, tau, L, mode, positions, velocities, estimate_vel, error, &
-                           m, nmasses, mass_types, mass_types_values, volumes, volumes_temp)
-  integer, intent(in) :: n, natoms, nmasses
+                           m, nmasses, mass_types, mass_types_values, volumes, volumes_temp, species, di_volumes)
+  integer, intent(in) :: n, natoms, nmasses, di_volumes
   real*8, intent(inout) :: m(:)
   real*8, intent(in)  :: mass_types_values(:)
   character*16, intent(in)  :: mass_types(:)
+  character*16, intent(out)  :: species(:)
   real*8, intent(in) :: L(1:3), volumes_temp(:), tau
   real*4, intent(inout) :: positions(:,:,:), velocities(:,:,:), volumes(:,:)
   logical, intent(in) :: estimate_vel
@@ -160,30 +163,54 @@ end subroutine
 
 subroutine get_omega(this_group, ngroups, n_in_group, volume_group, sigma_group, mass_group, mode, omega)
   real*8, intent(out) :: omega
-  real*8, intent(in) :: volume_group(:), sigma_group(:), mass_group(:)
+  real*8, intent(in) :: volume_group(:), sigma_group(:), mass_group(:), n_in_group(:)
   integer, intent(in) :: ngroups, this_group
-  integer, intent(in) :: n_in_group(:)
   character*1, intent(in) :: mode
 end subroutine
 
 subroutine fluidicity_calculator(nsupergroups, ngroups_in_supergroup, N_DoF, s0, M, T, V, V_voro, niter, res, sigma, f)
-  real*8, intent(in) :: T, V, s0(:), N_DoF(:), M(:), V_voro(:)
-  integer, intent(in) :: nsupergroups, ngroups_in_supergroup(:)
+  real*8, intent(in) :: T, V, s0(:), N_DoF(:), M(:), V_voro(:), ngroups_in_supergroup(:)
+  integer, intent(in) :: nsupergroups
   real*8, intent(out) :: res, f(:), sigma(:)
   integer, intent(out) :: niter
 end subroutine
 
 subroutine get_compressibility(nsupergroups, ngroups_in_supergroup, V, sigma, f, xi, z)
-  integer, intent(in) :: nsupergroups, ngroups_in_supergroup(:)
-  real*8, intent(in) :: V, sigma(:), f(:)
+  integer, intent(in) :: nsupergroups
+  real*8, intent(in) :: V, sigma(:), f(:), ngroups_in_supergroup(:)
   real*8, intent(out) :: z, xi
 end subroutine
 
-subroutine get_real_rotational_diffusivity(tau, n, N_DoF, ngroups, group_in_supergroup, j2, w, D)
-  integer, intent(in) :: n, ngroups, group_in_supergroup(:,:), j2
+subroutine get_real_rotational_diffusivity(tau, n, N_DoF, ngroups, group_in_supergroup, birth_time, death_time, j2, w, D)
+  integer, intent(in) :: n, ngroups, group_in_supergroup(:,:), j2, birth_time(:), death_time(:)
   real*8, intent(in) :: tau, N_DoF
   real*4, intent(in) :: w(:,:,:)
   real*8, intent(out) :: D
+end subroutine
+
+subroutine rebuild_topology(n, natoms, ngroups, nsupergroups, L, positions, species, &
+           atoms_in_group, natoms_in_group, symmetry_number_group, atom_belongs_to_group, &
+           group_in_supergroup, ngroups_in_supergroup, group_belongs_to_supergroup, &
+           nspecies_in_topology, topology_in_supergroup, neach_species_in_topology, &
+           ntopology_types, symmetry_number_of_topology, species_in_topology, &
+           nbond_types, bond_type, bond_cutoffs, birth_time, death_time, topology_has_changed)
+  integer, intent(in) :: n, natoms, nbond_types, ntopology_types
+  integer, intent(inout) :: ngroups, nsupergroups
+  real*8, intent(in) :: L(1:3), bond_cutoffs(:,:), symmetry_number_of_topology(:)
+  real*8, intent(inout) :: symmetry_number_group(:)
+  real*4, intent(in) :: positions(:,:,:)
+  character*16, intent(in) :: species(:), bond_type(:,:), species_in_topology(:,:)
+  integer, intent(inout) :: atoms_in_group(:,:), natoms_in_group(:), atom_belongs_to_group(:)
+  integer, intent(out) :: death_time(:), birth_time(:)
+  integer, intent(inout) :: ngroups_in_supergroup(:), group_in_supergroup(:,:), group_belongs_to_supergroup(:)
+  integer, intent(in) :: nspecies_in_topology(:), topology_in_supergroup(:), neach_species_in_topology(:,:)
+  logical, intent(out) :: topology_has_changed
+end subroutine
+
+subroutine interpolate_1D(r2, r1, n2, n1, tau2, tau1, f)
+  real*8, intent(inout) :: r1(:)
+  real*8, intent(in) :: tau1, tau2, f, r2(:)
+  integer, intent(in) :: n2, n1
 end subroutine
 
 end interface
@@ -209,14 +236,69 @@ end interface
 
 
 
+!******************************************************
+! Allocate arrays for trajectory input and FFT routine
+  allocate( wsave(1:2*n+15) )
+  allocate( r(1:n) )
+  allocate( r2(1:n) )
+!  allocate( rw(1:n) )
+  allocate( velocities(1:natoms, 1:3, 1:n) )
+  allocate( e_kin_tot(1:n) )
+  allocate( positions(1:natoms, 1:3, 1:n) )
+  allocate( Stotal(1:(n+1)/2, 1:3) )
+  allocate( m(1:natoms) )
+  allocate( species(1:natoms) )
+! Initialize wsave for FFT routine
+  call dffti(n, wsave)
+! FIX THIS: di_volumes SHOULD BE AVAILABLE TO THE USER AS AN INPUT VARIABLE
+! Only calculate Voronoi cell volumes every 100 time steps
+  di_volumes = 100
+  n_volumes = 1 + (n - 1)/di_volumes
+  allocate( volumes(1:natoms, 1:n_volumes) )
+  allocate( volumes_temp(1:natoms) ) 
+!******************************************************
 
 
 
 
 
+!******************************************************
+! Read trajectory file
+  call read_trajectory(n, natoms, tau, L, mode, positions, velocities, estimate_vel, error, &
+                       m, nmasses, mass_types, mass_types_values, volumes, volumes_temp, species, di_volumes)
+  if(error)then
+    execution_error = 98
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!!!! STOP EXECUTION IF THERE IS AN ERROR !!!!!
+  end if
+!******************************************************
 
 
 
+
+
+!******************************************************
+! Rebuild topology in case bonds break during the dynamics
+  if( check_topology )then
+    call rebuild_topology(n, natoms, ngroups, nsupergroups, L, positions, species, &
+                          atoms_in_group, natoms_in_group, symmetry_number_group, atom_belongs_to_group, &
+                          group_in_supergroup, ngroups_in_supergroup, group_belongs_to_supergroup, &
+                          nspecies_in_topology, topology_in_supergroup, neach_species_in_topology, &
+                          ntopology_types, symmetry_number_of_topology, species_in_topology, &
+                          nbond_types, bond_type, bond_cutoffs, birth_time, death_time, topology_has_changed)
+  else
+    allocate( birth_time(1:ngroups) )
+    allocate( death_time(1:ngroups) )
+    birth_time = 1
+    death_time = n + 1
+  end if
+  allocate( lifetime(1:ngroups) )
+  allocate( weight_group(1:ngroups) )
+  lifetime = death_time - birth_time
+  do i = 1, ngroups
+    weight_group(i) = dfloat(lifetime(i)) / dfloat(n)
+  end do
+!******************************************************
 
 
 
@@ -236,10 +318,6 @@ end interface
   allocate( v_vib(1:natoms, 1:3, 1:n) )
   allocate( rxv(1:natoms, 1:3, 1:n) )
   allocate( dist(1:natoms, 1:n) )
-! Only calculate Voronoi cell volumes every 100 time steps
-  n_volumes = 1 + n/100
-  allocate( volumes(1:natoms, 1:n_volumes) ) 
-  allocate( volumes_temp(1:natoms) )
   allocate( x(1:natoms) )
   allocate( y(1:natoms) )
   allocate( z(1:natoms) )
@@ -260,6 +338,9 @@ end interface
   allocate( SRbykB_group(1:ngroups) )
   allocate( entropy_group(1:ngroups, 1:3) )
   allocate( entropy1PT_group(1:ngroups, 1:3) )
+  allocate( mass_group(1:ngroups) )
+  allocate( Sgroup(1:ngroups,1:(n+1)/2,1:3) )
+  mass_group = 0.d0
   volume_group = 0.d0
   sigma_group = 0.d0
   entropy_group = 0.d0
@@ -271,24 +352,16 @@ end interface
 
 
 !******************************************************
-! Allocate arrays for trajectory input and FFT routine
-  allocate( wsave(1:2*n+15) )
-  allocate( r(1:n) )
-!  allocate( rw(1:n) )
-  allocate( velocities(1:natoms, 1:3, 1:n) )
-  allocate( e_kin_tot(1:n) )
-  allocate( positions(1:natoms, 1:3, 1:n) )
-  allocate( Stotal(1:(n+1)/2, 1:3) )
-  allocate( m(1:natoms) )
-! Initialize wsave for FFT routine
-  call dffti(n, wsave)
-!******************************************************
-
-
-
-
-
-!******************************************************
+! FIX FILTERING TO WORK WITH TOPOLOGY RECONSTRUCTION. In the meantime print warning message.
+  if( smooth .and. topology_has_changed )then
+    write(*,*)'                                       |'
+    write(*,*)'WARNING: usage of DoS filtering togeth-|'
+    write(*,*)'er with topology reconstruction is not |'
+    write(*,*)'currently implemented. Expect nonsense |'
+    write(*,*)'from this simulation!                  |'
+    write(*,*)'                                       |'
+    write(*,*)'.......................................|'
+  end if
 ! Take care of the filtering variables
   if(smooth)then
     allocate( smooth_x(1:(n+1)/2) )
@@ -311,30 +384,32 @@ end interface
 
 
 !******************************************************
-! Read trajectory file
-  call read_trajectory(n, natoms, tau, L, mode, positions, velocities, estimate_vel, error, &
-                       m, nmasses, mass_types, mass_types_values, volumes, volumes_temp)
-  if(error)then
-    execution_error = 98
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-!!!! STOP EXECUTION IF THERE IS AN ERROR !!!!!
-  end if
-!******************************************************
-
-
-
-
-
-!******************************************************
 ! Calculate the trajectory-averaged Voronoi cell volumes
 ! for each group
-  do j=1,ngroups
-    do j2=1,natoms_in_group(j)
-      do i=1,n_volumes
-        volume_group(j) = volume_group(j) + volumes(atoms_in_group(j,j2),i)
-      end do
+  do j= 1, ngroups
+    k = 0
+    do i = 1, n, di_volumes
+!     Transform trajectory index into volume index
+      i2 = 1 + i/di_volumes
+!     Add the volumes only during the time when the group is alive
+      if( birth_time(j) <= i .and. death_time(j) > i )then
+        k = k + 1
+        do j2=1,natoms_in_group(j)
+          volume_group(j) = volume_group(j) + volumes(atoms_in_group(j,j2),i2)
+        end do
+      end if
     end do
-    volume_group(j) = volume_group(j) / dfloat(n_volumes)
+!   If a group is short-lived or the Voronoi sampling is low, it could be that
+!   there are no Voronoi volumes to use (k = 0). In that case, we compute one
+!   Voronoi volume for the group at a time exactly in between birth and death
+    if( k > 0 )then
+      volume_group(j) = volume_group(j) / dfloat(k)
+    else
+      i2 = 1 + (birth_time(j) + death_time(j)) / (2*di_volumes)
+      do j2=1,natoms_in_group(j)
+        volume_group(j) = volume_group(j) + volumes(atoms_in_group(j,j2),i2)
+      end do
+    end if
   end do
 !******************************************************
 
@@ -374,32 +449,35 @@ end interface
         write(*,'(A)', advance='no')'='
         k2 = k2 + 1
       end if
-!     Read in molecule info
-      do j2=1,natoms_in_group(j)
-        do k=1,3
-          rp(j2,k) = positions(atoms_in_group(j,j2), k, i)
-          vp(j2,k) = velocities(atoms_in_group(j,j2), k, i)
+!     Perform operations only during the time the group is alive
+      if( birth_time(j) <= i .and. death_time(j) > i )then
+!       Read in molecule info
+        do j2=1,natoms_in_group(j)
+          do k=1,3
+            rp(j2,k) = positions(atoms_in_group(j,j2), k, i)
+            vp(j2,k) = velocities(atoms_in_group(j,j2), k, i)
+          end do
         end do
-      end do
-!     Get decomposed values for present molecule
-      call restore_replica(L, rp, natoms_in_group(j))
-      call get_decomposed_velocities(mp, rp, vp, natoms_in_group(j), v_rot_group, v_cm_group, v_vib_group, mass_group(j), &
-                                     w_group, rxv_group, dist_group, temp(1:3))
-      w(j, 1:3, i) = w_group(1:3)
-!     Calculate average principal moments of inertia (amu * nm^2)
-      eig_group(j,1:3) = eig_group(j,1:3) + temp(1:3)/dfloat(n)
-!     and instantaneous ones
-!      eig_group_inst(j,1:3,i) = temp(1:3)
-!     Pass values to atoms
-      do j2=1,natoms_in_group(j)
-        do k=1,3
-          v_rot(atoms_in_group(j,j2), k, i) = v_rot_group(j2, k)
-          v_cm(atoms_in_group(j,j2), k, i) = v_cm_group(k)
-          v_vib(atoms_in_group(j,j2), k, i) = v_vib_group(j2, k)
-          rxv(atoms_in_group(j,j2), k, i) = rxv_group(j2, k)
+!       Get decomposed values for present molecule
+        call restore_replica(L, rp, natoms_in_group(j))
+        call get_decomposed_velocities(mp, rp, vp, natoms_in_group(j), v_rot_group, v_cm_group, v_vib_group, mass_group(j), &
+                                       w_group, rxv_group, dist_group, temp(1:3))
+        w(j, 1:3, i) = w_group(1:3)
+!       Calculate average principal moments of inertia (amu * nm^2)
+        eig_group(j,1:3) = eig_group(j,1:3) + temp(1:3)/dfloat(lifetime(j))
+!       and instantaneous ones
+!        eig_group_inst(j,1:3,i) = temp(1:3)
+!       Pass values to atoms
+        do j2=1,natoms_in_group(j)
+          do k=1,3
+            v_rot(atoms_in_group(j,j2), k, i) = v_rot_group(j2, k)
+            v_cm(atoms_in_group(j,j2), k, i) = v_cm_group(k)
+            v_vib(atoms_in_group(j,j2), k, i) = v_vib_group(j2, k)
+            rxv(atoms_in_group(j,j2), k, i) = rxv_group(j2, k)
+          end do
+          dist(atoms_in_group(j,j2), i) = dist_group(j2)
         end do
-        dist(atoms_in_group(j,j2), i) = dist_group(j2)
-      end do
+      end if
     end do
 !   Deallocate some variables
     deallocate(mp, rp, vp)
@@ -451,6 +529,8 @@ end interface
   write(*,*)'Calculating density of states...       |'
   write(*,*)'                                       |'
 ! Check prime number factorization for n and print warning if high factors are found
+! FIX THIS: WHEN GROUPS BREAK AND THE TOPOLOGY IS REBUILT SOMETIMES THE lifetime(j) YIELDS HIGH FACTOR
+! DECOMPOSITION (THIS IS INDEPENDENT OF n). FIGURE OUT HOW TO DEAL WITH THAT
   call factorize(n)
 ! Print progress bar only if we have more than 36 degrees of freedom
   k3 = 0
@@ -468,9 +548,11 @@ end interface
   update_bar = dfloat(9*k3)/36.d0
   k3 = 1
 !
+  n_prev = n
   Sgroup = 0.d0
-!$omp parallel do firstprivate(wsave) private(r,rw,i,j,j2,k,k2,smooth_y,smooth_ys,smooth_rw,smooth_res) shared(Sgroup,k3,k4)
-  do j=1,ngroups
+!$omp parallel do firstprivate(wsave) private(r,rw,r2,i,i2,j,j2,k,k2,n_prev,smooth_y,smooth_ys,smooth_rw,smooth_res) &
+!$omp& shared(Sgroup,k3,k4)
+  do j=1,ngroups 
     do j2=1,natoms_in_group(j)
       do k=1,3
 !     k2 now is the 3 components (cm, rot and vib)
@@ -484,25 +566,68 @@ end interface
         end if
 !$omp end critical
 !       End printing progress bar
-        do i=1,n
+!       We need to Fourier-transform the arrays according to the life cycle of the different groups
+        r = 0.d0
+        do i = birth_time(j), death_time(j)-1
+          i2 = i + 1 - birth_time(j)
 !         Translational
           if(k2 == 1)then
-            r(i) = v_cm(atoms_in_group(j,j2), k, i)
+            r(i2) = v_cm(atoms_in_group(j,j2), k, i)
 !         Rotational
           else if(k2 == 2)then
-            r(i) = rxv(atoms_in_group(j,j2), k, i) / dist(atoms_in_group(j,j2), i)
+            r(i2) = rxv(atoms_in_group(j,j2), k, i) / dist(atoms_in_group(j,j2), i)
 !         Vibrational
           else if(k2 == 3)then
-            r(i) = v_vib(atoms_in_group(j,j2), k, i)
+            r(i2) = v_vib(atoms_in_group(j,j2), k, i)
           end if
         end do
-!       Call FFT routine
-        call dfftf(n, r, wsave)
-!       Save DoS for this group
-        Sgroup(j,1,k2) = Sgroup(j,1,k2) + m(atoms_in_group(j,j2)) * r(1)**2*tau/dfloat(n)**2
-        do i=2,(n+1)/2
-          Sgroup(j,i,k2) = Sgroup(j,i,k2) + m(atoms_in_group(j,j2)) * (r(2*i-2)**2+r(2*i-1)**2)*tau/dfloat(n)**2
-        end do
+        if( lifetime(j) > 0 )then
+!         Call FFT routine
+!         For groups which do not live for the whole dynamics, we use a different array
+          if( lifetime(j) /= n )then
+            deallocate(r2)
+            allocate( r2(1:lifetime(j)) )
+            r2(1:lifetime(j)) = r(1:lifetime(j))
+            if( n_prev /= lifetime(j) )then
+              call dffti(lifetime(j), wsave)
+              n_prev = lifetime(j)
+            end if
+            call dfftf(lifetime(j), r2, wsave)
+            interpolate_dos = .true.
+!         For groups which live for the whole dynamics we're happy
+          else
+            if( n_prev /= n )then
+              call dffti(n, wsave)
+              n_prev = n
+            end if
+            call dfftf(n, r, wsave)
+            interpolate_dos = .false.
+          end if
+!         Save DoS for this group
+          if( interpolate_dos )then
+!           We perform the interpolation on the density of states
+            r2(1) = r2(1)**2
+            do i = 2, (lifetime(j)+1)/2
+              r2(i) = r2(2*i-2)**2+r2(2*i-1)**2
+            end do
+!           This is the density of states on the r2 mesh
+            r2 = r2 * tau*dfloat(lifetime(j))/dfloat(n) / dfloat(lifetime(j))**2
+!           We interpolate from the r2 mesh to the r mesh. Remember the period for the interpolation routine
+!           is actually in frequency domain: period_nu = (n-1)/2/tau
+            call interpolate_1D(r2, r, (lifetime(j)+1)/2, (n+1)/2, &
+                                dfloat(lifetime(j)-1)/2.d0/(tau*dfloat(lifetime(j))/dfloat(n)), &
+                                dfloat(n-1)/2.d0/tau, 1.d0)
+            Sgroup(j,1,k2) = Sgroup(j,1,k2) + m(atoms_in_group(j,j2)) * r(1)
+            do i=2,(n+1)/2
+              Sgroup(j,i,k2) = Sgroup(j,i,k2) + m(atoms_in_group(j,j2)) * r(i)
+            end do
+          else
+            Sgroup(j,1,k2) = Sgroup(j,1,k2) + m(atoms_in_group(j,j2)) * r(1)**2*tau/dfloat(n)**2
+            do i=2,(n+1)/2
+              Sgroup(j,i,k2) = Sgroup(j,i,k2) + m(atoms_in_group(j,j2)) * (r(2*i-2)**2+r(2*i-1)**2)*tau/dfloat(n)**2
+            end do
+          end if
+        end if
       end do
       end do
     end do
@@ -534,34 +659,48 @@ end interface
     allocate( volume_supergroup(1:nsupergroups) )
     allocate( sigma_supergroup(1:nsupergroups, 1:3) )
     allocate( natoms_in_supergroup(1:nsupergroups) )
+    allocate( ngroups_in_supergroup_eff(1:nsupergroups) )
     allocate( eig_supergroup(1:nsupergroups,1:3) )
     sigma_supergroup = 0.d0
     Ssupergroup = 0.d0
     mass_supergroup = 0.d0
     symmetry_number_supergroup = 0.d0
     volume_supergroup = 0.d0
-    natoms_in_supergroup = 0
+    natoms_in_supergroup = 0.d0
     eig_supergroup = 0.d0
+    ngroups_in_supergroup_eff = 0.d0
+    ngroups_eff = 0.d0
     do j=1,nsupergroups
       do j2=1,ngroups_in_supergroup(j)
-        eig_supergroup(j,1:3) = eig_supergroup(j,1:3) + &
-                                 eig_group(group_in_supergroup(j,j2),1:3)/dfloat(ngroups_in_supergroup(j))
-        symmetry_number_supergroup(j) = symmetry_number_supergroup(j) + &
-                                        symmetry_number_group(group_in_supergroup(j,j2))/dfloat(ngroups_in_supergroup(j))
-        mass_supergroup(j) = mass_supergroup(j) + mass_group(group_in_supergroup(j,j2))
-        volume_supergroup(j) = volume_supergroup(j) + volume_group(group_in_supergroup(j,j2))
-        natoms_in_supergroup(j) = natoms_in_supergroup(j) + natoms_in_group(group_in_supergroup(j,j2))
+        ngroups_in_supergroup_eff(j) = ngroups_in_supergroup_eff(j) + weight_group(group_in_supergroup(j,j2))
+      end do
+      ngroups_eff = ngroups_eff + ngroups_in_supergroup_eff(j)
+    end do
+    do j=1,nsupergroups
+      do j2=1,ngroups_in_supergroup(j)
+        eig_supergroup(j,1:3) = eig_supergroup(j,1:3) + weight_group(group_in_supergroup(j,j2))* &
+                                eig_group(group_in_supergroup(j,j2),1:3)/ngroups_in_supergroup_eff(j)
+        symmetry_number_supergroup(j) = symmetry_number_supergroup(j) + weight_group(group_in_supergroup(j,j2))* &
+                                        symmetry_number_group(group_in_supergroup(j,j2))/ngroups_in_supergroup_eff(j)
+        mass_supergroup(j) = mass_supergroup(j) + weight_group(group_in_supergroup(j,j2))* &
+                             mass_group(group_in_supergroup(j,j2))
+        volume_supergroup(j) = volume_supergroup(j) + weight_group(group_in_supergroup(j,j2))* &
+                               volume_group(group_in_supergroup(j,j2))
+        natoms_in_supergroup(j) = natoms_in_supergroup(j) + weight_group(group_in_supergroup(j,j2))* &
+                                  dfloat(natoms_in_group(group_in_supergroup(j,j2)))
         do k2=1,3
-          Ssupergroup(j,1,k2) = Ssupergroup(j,1,k2) + Sgroup(group_in_supergroup(j,j2),1,k2)
+          Ssupergroup(j,1,k2) = Ssupergroup(j,1,k2) + weight_group(group_in_supergroup(j,j2))* &
+                                Sgroup(group_in_supergroup(j,j2),1,k2)
           do i=2,(n+1)/2
-            Ssupergroup(j,i,k2) = Ssupergroup(j,i,k2) + Sgroup(group_in_supergroup(j,j2),i,k2)
+            Ssupergroup(j,i,k2) = Ssupergroup(j,i,k2) + weight_group(group_in_supergroup(j,j2))* &
+                                  Sgroup(group_in_supergroup(j,j2),i,k2)
           end do
         end do
       end do
 !     Mass of the supergroup is average mass of its groups. The groups should be equivalent
 !     (e.g., all water molecules) and so this should not be necessary, but it's done for
 !     consistency in case the groups are not equivalent (for some reason)
-      mass_supergroup(j) = mass_supergroup(j) / dfloat(ngroups_in_supergroup(j))
+      mass_supergroup(j) = mass_supergroup(j) / ngroups_in_supergroup_eff(j)
     end do
   end if
   if(update_bar > 0.9999d0)then
@@ -674,6 +813,9 @@ end interface
 !       Calculate the integral of the DoS:
         degf_group(j,k) = degf_group(j,k) + conv1 * twobykT * Sgroup(j,i,k) / tau
       end do
+! FIX THIS: IN GENERAL, IT DOES NOT MAKE A LOT OF SENSE TO COMPUTE THESE PROPERTIES FOR SINGLE GROUPS
+! A REFACTORING OF THE CODE SHOULD BE CARRIED OUT TO GIVE THE INDIVIDUAL CONTRIBUTION OF EACH GROUP
+! TO ITS SUPERGROUP'S ENTROPY
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
       if(1 == 1)then
 !       This menthod of calculating the fluidicity is essentially equivalent to Lin's method,
@@ -683,8 +825,8 @@ end interface
 !       For a monocomponent system, the results should be identical.
 !       Available for testing and debugging purposes.
 !       Calculate Delta:
-        call get_omega(j, ngroups, 1+0*natoms_in_group, volume_group, sigma_group(1:ngroups,k), mass_group, "v", omega)
-        call get_delta(conv1 * twobykT * Sgroup(j,1,k), T, conv2, natoms_in_group(j), 1, &
+        call get_omega(j, ngroups, dfloat(1+0*natoms_in_group), volume_group, sigma_group(1:ngroups,k), mass_group, "v", omega)
+        call get_delta(conv1 * twobykT * Sgroup(j,1,k), T, conv2, dfloat(natoms_in_group(j)), 1.d0, &
                        degf_group(j,k), mass_group(j), V, delta_group(j,k), omega)
 !       And f:
         call find_f(delta_group(j,k), f_group(j,k))
@@ -702,11 +844,12 @@ end interface
 !   is not well defined anyway, and not used for entropy calculations. We can therefore use the heuristic approach above.
 !   For single groups, use this code only for testing and debugging.
     do k = 1, 3
-      call fluidicity_calculator(ngroups, 1+0*natoms_in_group, degf_group(1:ngroups,k), conv1 * twobykT * Sgroup(1:ngroups,1,k), &
+      call fluidicity_calculator(ngroups, dfloat(1+0*natoms_in_group), degf_group(1:ngroups,k), &
+                                 conv1 * twobykT * Sgroup(1:ngroups,1,k), &
                                  mass_group, T, V, volume_group, niter, res, sigma_group(1:ngroups,k), f_group(1:ngroups,k))
       do j = 1, ngroups
 !       Get partial compressibility and partial packing fraction
-        call get_compressibility(1, 1+0*natoms_in_group(j:j), volume_group(j), sigma_group(j:j, k), &
+        call get_compressibility(1, dfloat(1+0*natoms_in_group(j:j)), volume_group(j), sigma_group(j:j, k), &
                                  f_group(j:j, k), y_group(j,k), z_group(j,k))
       end do
     end do
@@ -749,11 +892,11 @@ end interface
             omega = 1
             temp(1) = volume_supergroup(j)
           else
-            call get_omega(j, nsupergroups, ngroups_in_supergroup, volume_supergroup, &
+            call get_omega(j, nsupergroups, ngroups_in_supergroup_eff, volume_supergroup, &
                            sigma_supergroup(1:nsupergroups,k), mass_supergroup, "v", omega)
             temp(1) = V
           end if
-          call get_delta(conv1 * twobykT * Ssupergroup(j,1,k), T, conv2, natoms_in_supergroup(j), ngroups_in_supergroup(j), &
+          call get_delta(conv1 * twobykT * Ssupergroup(j,1,k), T, conv2, natoms_in_supergroup(j), ngroups_in_supergroup_eff(j), &
                          degf_supergroup(j,k), mass_supergroup(j), temp(1), delta_supergroup(j,k), omega)
 !         And f:
           call find_f(delta_supergroup(j,k), f_supergroup(j,k))
@@ -762,7 +905,7 @@ end interface
           z_supergroup(j,k) = (1.d0 + y_supergroup(j,k) + y_supergroup(j,k)**2d0 - y_supergroup(j,k)**3.d0) / &
                               (1.d0 - y_supergroup(j,k))**3.d0
           sigma_supergroup(j,k) = (6.d0/pi * y_supergroup(j,k) / f_supergroup(j,k) * volume_supergroup(j) / &
-                                  dfloat(ngroups_in_supergroup(j)) )**(1.d0/3.d0)
+                                  ngroups_in_supergroup_eff(j) )**(1.d0/3.d0)
         end if
       end do
     end do
@@ -771,13 +914,13 @@ end interface
     if(f_opt)then
 !     Translational part
       k = 1
-      call fluidicity_calculator(nsupergroups, ngroups_in_supergroup, degf_supergroup(1:nsupergroups,k), &
+      call fluidicity_calculator(nsupergroups, ngroups_in_supergroup_eff, degf_supergroup(1:nsupergroups,k), &
                                  conv1 * twobykT * Ssupergroup(1:nsupergroups,1,k), mass_supergroup, T, V, &
                                  volume_supergroup, niter, res, sigma_supergroup(1:nsupergroups,k), &
                                  f_supergroup(1:nsupergroups,k))
       do j = 1, nsupergroups
 !       Get partial compressibility and partial packing fraction
-        call get_compressibility(1, ngroups_in_supergroup(j:j), volume_supergroup(j), sigma_supergroup(j:j, k), &
+        call get_compressibility(1, ngroups_in_supergroup_eff(j:j), volume_supergroup(j), sigma_supergroup(j:j, k), &
                                  f_supergroup(j:j, k), y_supergroup(j,k), z_supergroup(j,k))
       end do
     end if
@@ -789,16 +932,16 @@ end interface
       do j = 1, nsupergroups
 !       Real rotational diffusion coefficient -> D_rot_real
         call get_real_rotational_diffusivity(tau, n, degf_supergroup(j,k), ngroups_in_supergroup(j), &
-                                             group_in_supergroup, j, w, D_rot_real)
+                                             group_in_supergroup, birth_time, death_time, j, w, D_rot_real)
 !        call get_diffusivity(Ssupergroup(j,1,k), T, mass_supergroup(j), degf_supergroup(j,k), D_rot_real)
 !       Ideal translational diffusion coefficient -> D_ideal
-        call get_omega(j, nsupergroups, ngroups_in_supergroup, volume_supergroup, &
+        call get_omega(j, nsupergroups, ngroups_in_supergroup_eff, volume_supergroup, &
                        sigma_supergroup(1:nsupergroups, k), mass_supergroup, "v", omega)
         call get_zero_pressure_diffusivity(sigma_supergroup(j,k), omega, T, mass_supergroup(j), &
-                                           dfloat(ngroups_in_supergroup(j)), V, D_ideal)
+                                           ngroups_in_supergroup_eff(j), V, D_ideal)
 !       Ideal rotational diffusion coefficient -> D_rot_ideal
         call get_ideal_rotational_diffusivity(sigma_supergroup(j,k), T, mass_supergroup(j), &
-                                              dfloat(ngroups_in_supergroup(j)), volume_supergroup(j), D_ideal, D_rot_ideal)
+                                              ngroups_in_supergroup_eff(j), volume_supergroup(j), D_ideal, D_rot_ideal)
         D_rot_ideal = D_rot_ideal / 9.d0 * ( eig_supergroup(j,1) + eig_supergroup(j,2) + eig_supergroup(j,3) ) * &
                     ( 1.d0/eig_supergroup(j,1) + 1.d0/eig_supergroup(j,2) + 1.d0/eig_supergroup(j,3) )
 !       Fluidicity
@@ -848,6 +991,7 @@ end interface
     do k = 1,3
 !     Calculate SHS divided by kB
       Ng = 1
+! FIX THIS. AGAIN (SEE ABOVE) IT MAKES LITTLE SENSE TO CALCULATE THIS FOR INDIVIDUAL GROUPS. RETHINK THIS PART OF THE CODE
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !temp(1) = V
 temp(1) = volume_group(j)
@@ -882,13 +1026,13 @@ temp(1) = volume_group(j)
     allocate( SRbykB_supergroup(1:nsupergroups) )
     do j=1,nsupergroups
       do k = 1,3
-        Nsg = ngroups_in_supergroup(j)
+        Nsg = ngroups_in_supergroup_eff(j)
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !temp(1) = V
 temp(1) = volume_supergroup(j)
         SHSbykB_supergroup(j,k) = 5.d0/2.d0 &
            + dlog(conv3 * (2.d0 * pi * mass_supergroup(j) * kB * T / h**2.d0)**(3.d0/2.d0) * &
-             temp(1) * z_supergroup(j,k) / dfloat(Nsg) / f_supergroup(j,k)) &
+             temp(1) * z_supergroup(j,k) / Nsg / f_supergroup(j,k)) &
            + y_supergroup(j,k) * (3.d0 * y_supergroup(j,k) - 4.d0) / (1.d0 - y_supergroup(j,k))**2.d0
 !       If fluidicity is zero truncate SHS to zero
         if(f_supergroup(j,k) < 1.d-10)then
@@ -1097,22 +1241,22 @@ temp(1) = volume_supergroup(j)
       end do
       ! Entropy of mixture
       if( smixture == "vol")then
-        temp(1) = kB * dfloat(ngroups_in_supergroup(j)) * dlog(V / volume_supergroup(j))
+        temp(1) = kB * ngroups_in_supergroup_eff(j) * dlog(V / volume_supergroup(j))
       else if( smixture == "mol")then
-        temp(1) = kB * dfloat(ngroups_in_supergroup(j)) * dlog(dfloat(ngroups) / dfloat(ngroups_in_supergroup(j)))
+        temp(1) = kB * ngroups_in_supergroup_eff(j) * dlog(ngroups_eff / ngroups_in_supergroup_eff(j))
 !     This entropy of mixing should only be used for binary mixtures !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! UNTESTED!!!!!
       else if( nsupergroups == 2 .and. smixture == "bin")then
-        v_dash = volume_supergroup(2) / volume_supergroup(1) * dfloat(ngroups_in_supergroup(1)) / dfloat(ngroups_in_supergroup(2))
-        m_frac = dfloat(ngroups_in_supergroup(1)) / dfloat(ngroups)
+        v_dash = volume_supergroup(2) / volume_supergroup(1) * ngroups_in_supergroup_eff(1) / ngroups_in_supergroup_eff(2)
+        m_frac = ngroups_in_supergroup_eff(1) / ngroups_eff
         alpha = (dabs(v_dash - 1.d0) * (1.d0 - 2.d0 * m_frac) + v_dash + 1.d0) / 2.d0
         v_dash = 1.d0 / v_dash
         beta = (dabs(v_dash - 1.d0) * (1.d0 - 2.d0 * m_frac) + v_dash + 1.d0) / 2.d0
         if(j == 1)then
-          temp(1) = kB * dfloat(ngroups_in_supergroup(1)) * dlog( (dfloat(ngroups_in_supergroup(1)) + &
-                    dfloat(ngroups_in_supergroup(2))*alpha) / dfloat(ngroups_in_supergroup(1)) )
+          temp(1) = kB * ngroups_in_supergroup_eff(1) * dlog( (ngroups_in_supergroup_eff(1) + &
+                    ngroups_in_supergroup_eff(2)*alpha) / ngroups_in_supergroup_eff(1) )
         else if(j == 2)then
-          temp(1) = kB * dfloat(ngroups_in_supergroup(2)) * dlog( (dfloat(ngroups_in_supergroup(2)) + &
-                    dfloat(ngroups_in_supergroup(1))*beta) / dfloat(ngroups_in_supergroup(2)) )
+          temp(1) = kB * ngroups_in_supergroup_eff(2) * dlog( (ngroups_in_supergroup_eff(2) + &
+                    ngroups_in_supergroup_eff(1)*beta) / ngroups_in_supergroup_eff(2) )
         end if
       end if
       entropy_supergroup(j,1) = entropy_supergroup(j,1) + temp(1)
@@ -1145,19 +1289,20 @@ temp(1) = volume_supergroup(j)
         temp(1:3) = 0.d0
         do j2 = 1, ngroups_in_supergroup(j)
 !         3 translational DoF per group in this supergroup
-          temp(1) = temp(1) + 3.d0
+          temp(1) = temp(1) + weight_group(group_in_supergroup(j,j2))*3.d0
 !         Total number of DoF for this group (takes constrains into account)
-          temp(4) = dot_product(degf_group(group_in_supergroup(j,j2),1:3), (/1.d0, 1.d0, 1.d0/))
+          temp(4) = weight_group(group_in_supergroup(j,j2))* &
+                    dot_product(degf_group(group_in_supergroup(j,j2),1:3), (/1.d0, 1.d0, 1.d0/))
 !         For diatomic molecules
           if(natoms_in_group(group_in_supergroup(j,j2)) == 2)then
 !           We add 2 rotational DoF per linear molecule
-            temp(2) = temp(2) + 2.d0
+            temp(2) = temp(2) + weight_group(group_in_supergroup(j,j2))*2.d0
 !           We add the rest as vibrational DoF (if the bond is constrained this is correctly zero)
-            temp(3) = temp(3) + temp(4) - 5.d0
+            temp(3) = temp(3) + temp(4) - weight_group(group_in_supergroup(j,j2))*5.d0
 !         For molecules with 3 or more atoms
           else if(natoms_in_group(group_in_supergroup(j,j2)) > 2)then
-            temp(2) = temp(2) + 3.d0
-            temp(3) = temp(3) + temp(4) - 6.d0
+            temp(2) = temp(2) + weight_group(group_in_supergroup(j,j2))*3.d0
+            temp(3) = temp(3) + temp(4) - weight_group(group_in_supergroup(j,j2))*6.d0
           end if
         end do
 !       Make sure we don't divide by zero if there are e.g. no vibrational and/or rotational DoF
@@ -1196,6 +1341,60 @@ temp(1) = volume_supergroup(j)
 
 
 end program
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+subroutine interpolate_1D(r2, r1, n2, n1, tau2, tau1, f)
+
+! This subroutine linearly interpolates 1-D array r2 on the mesh given by array 1-D array r1
+! assuming that the first element of both arrays is given at zero
+! tau1 and tau2 are the size of the domains, that is tau1 = dt1*n1 and tau2 = dt2*n2, where
+! dt is the spacing between data points and n is the number of data points.
+! That is, data point n is given at tau = dt*(n-1)
+! f is a normalizing factor, where data points in r2 are 1/f times too large. The interpolated
+! data will be returned as f*r2 on the r1 mesh.
+! Array r1 will be overwritten
+  implicit none
+
+  real*8 :: r1(:), r2(:), tau1, tau2, dt1, dt2, f
+  integer :: n1, n2, t1, t2
+
+  dt1 = tau1 / dfloat(n1)
+  dt2 = tau2 / dfloat(n2)
+  r1 = 0.d0
+
+  do t1 = 0, n1-1
+!   For each t1, we need to identify the closest t2 on the left and the right
+!   This one is always on the left or at the same point
+    t2 = int( dfloat(t1) * dt1 / dt2 )
+!   t2 cannot be larger than n2-2
+    if( t2 <= n2-2 )then
+!     If points coincide exactly (including at zero), do not interpolate. We allow for rounding tolerance
+       if( dabs(t2*dt2-t1*dt1) < 1.d-6 )then
+        r1(t1+1) = r2(t2+1)
+!     Otherwise, inter-/extrapolate from r2 to r1
+      else
+        r1(t1+1) = r2(t2+1) + (r2(t2+2) - r2(t2+1))/dt2 * (dfloat(t1)*dt1 - dfloat(t2)*dt2)
+      end if
+    end if
+  end do
+
+  r1 = r1*f
+
+end subroutine
+
 
 
 
@@ -1438,7 +1637,7 @@ subroutine get_delta(s0, T, conv2, natoms, nparticles, degf_group, mass_group, V
   implicit none
 
   real*8 :: delta, s0, conv2, mass_group, T, V, degf_group
-  integer :: natoms, nparticles
+  real*8 :: natoms, nparticles
   real*8 :: pi, kB, omega, n1, n2
 
   pi = dacos(-1.d0)
@@ -1446,7 +1645,7 @@ subroutine get_delta(s0, T, conv2, natoms, nparticles, degf_group, mass_group, V
   kB = 8.6173324d-5
 
   n1 = degf_group
-  n2 = dfloat(nparticles)
+  n2 = nparticles
 
 ! Return delta
   if( degf_group < 1.d-5 )then

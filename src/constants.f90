@@ -21,7 +21,7 @@ module constants
   nm = 1.d-9
   eV = 1.602176565d-19
   amu = 1.660538921d-27
-! To transform from eV to J
+! To transform from eV to J/mol
   eVtoJ = 96486.9d0
 ! Conversion factors
 ! Sum(s_j^k)(0) for each atom group comes in nm^2 / ps, we then

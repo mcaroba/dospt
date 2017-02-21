@@ -1,7 +1,8 @@
 !=================================================================================================
 !=================================================================================================
 subroutine read_trajectory(n, natoms, tau, L, mode, positions, velocities, estimate_vel, error, &
-                           m, nmasses, mass_types, mass_types_values, volumes, volumes_temp)
+                           m, nmasses, mass_types, mass_types_values, volumes, volumes_temp, &
+                           species, di_volumes)
 
   implicit none
 
@@ -9,7 +10,7 @@ subroutine read_trajectory(n, natoms, tau, L, mode, positions, velocities, estim
   real*4 :: positions(:,:,:), velocities(:,:,:), volumes(:,:)
   real*8 :: r1(1:3), r2(1:3), r3(1:3), r4(1:3), r5(1:3)
   real*8 :: r0(1:3), v0(1:3), dt, tau
-  integer :: n, natoms, i, j, t1, t2, t3, t4, t5, t0, iostatus
+  integer :: n, natoms, i, j, t1, t2, t3, t4, t5, t0, iostatus, di_volumes
   character*64 :: crap, format_gromacs1, format_gromacs2
   character*8 :: filename
   character*3 :: mode
@@ -22,7 +23,7 @@ subroutine read_trajectory(n, natoms, tau, L, mode, positions, velocities, estim
   character*16 :: mass_label
   real*8 :: m(:)
   real*8 :: mass_types_values(:)
-  character*16 :: mass_types(:)
+  character*16 :: mass_types(:), species(:)
 
   real*8, allocatable :: x(:), y(:), z(:)
 
@@ -95,6 +96,7 @@ end interface
       do j=1,natoms
         read(10,*) mass_label, positions(j,1,i), positions(j,2,i), positions(j,3,i)
         if(i == 1)then
+          species(j) = mass_label
           call get_mass(mass_label, m(j), nmasses, mass_types, mass_types_values)
         end if
         positions(j,1:3,i) = 0.1 * positions(j,1:3,i)
@@ -140,6 +142,7 @@ end interface
         end if
         if(i == 1)then
           read(crap,*) mass_label
+          species(j) = mass_label
           call get_mass(mass_label, m(j), nmasses, mass_types, mass_types_values)
         end if
         x(j) = positions(j,1,i)
@@ -149,12 +152,12 @@ end interface
       read(10,*)
     end if
 !
-!   Get Voronoi cell volumes every 100 time steps
+!   Get Voronoi cell volumes every di_volumes time steps
     if( i == 1 )then
       call voronoi_volumes(natoms, L, x, y, z, volumes_temp)
       volumes(1:natoms,j2) = volumes_temp(1:natoms)
       j2 = j2 + 1
-    else if( mod(i,100) == 0 )then
+    else if( mod(i,di_volumes) == 1 )then
       call voronoi_volumes(natoms, L, x, y, z, volumes_temp)
       volumes(1:natoms,j2) = volumes_temp(1:natoms)
       j2 = j2 + 1

@@ -3,10 +3,9 @@ subroutine fluidicity_calculator(nsupergroups, ngroups_in_supergroup, N_DoF, s0,
   implicit none
 
   real*8 :: T, V, pi, res_min, res, dsigma
-  real*8 :: z, xi
+  real*8 :: z, xi, ngroups_in_supergroup(:)
   integer :: nsupergroups, i, j, N_sigma, N_dim, k, niter, level, N_levels
   real*8 :: f_tol, step, dV, res_prev, start_scan, end_scan
-  integer :: ngroups_in_supergroup(:)
   real*8 :: s0(:), N_DoF(:), M(:), f(:), V_voro(:), sigma(:), alpha
   real*8, allocatable :: omega(:), D(:), D0(:), sigma0(:), y(:), sigma_min(:), &
                          f_prev(:), grad(:), res_plus(:), res_minus(:), sigma_temp(:), sigma_prev(:)
@@ -24,22 +23,22 @@ subroutine fluidicity_calculator(nsupergroups, ngroups_in_supergroup, N_DoF, s0,
     end subroutine
 
     subroutine get_compressibility(nsupergroups, ngroups_in_supergroup, V, sigma, f, xi, z)
-      integer, intent(in) :: nsupergroups, ngroups_in_supergroup(:)
-      real*8, intent(in) :: V, sigma(:), f(:)
+      integer, intent(in) :: nsupergroups
+      real*8, intent(in) :: V, sigma(:), f(:), ngroups_in_supergroup(:)
       real*8, intent(out) :: z, xi
     end subroutine
 
     subroutine HS_res(nsupergroups, ngroups_in_supergroup, s0, T, M, N_DoF, V, V_partial, sigma, f, alpha, res)
-      real*8, intent(in) ::  s0(:), N_DoF(:), M(:), sigma(:), V, V_partial(:), T, alpha
+      real*8, intent(in) ::  s0(:), N_DoF(:), M(:), sigma(:), V, V_partial(:), T, alpha, ngroups_in_supergroup(:)
       real*8, intent(out) :: res, f(:)
-      integer, intent(in) :: ngroups_in_supergroup(:), nsupergroups
+      integer, intent(in) :: nsupergroups
     end subroutine
 
     subroutine get_omega(this_group, ngroups, n_in_group, volume_group, sigma_group, mass_group, mode, omega)
       real*8, intent(out) :: omega
       real*8, intent(in) :: volume_group(:), sigma_group(:), mass_group(:)
       integer, intent(in) :: ngroups, this_group
-      integer, intent(in) :: n_in_group(:)
+      real*8, intent(in) :: n_in_group(:)
       character*1, intent(in) :: mode
     end subroutine
   end interface
@@ -70,7 +69,7 @@ subroutine fluidicity_calculator(nsupergroups, ngroups_in_supergroup, N_DoF, s0,
 
 
 ! Initial estimate for sigma based on Voronoi volumes
-  sigma0(1:nsupergroups) = (6.d0 * V_voro(1:nsupergroups) / dfloat(ngroups_in_supergroup(1:nsupergroups)) / pi)**(1./3.)
+  sigma0(1:nsupergroups) = (6.d0 * V_voro(1:nsupergroups) / ngroups_in_supergroup(1:nsupergroups) / pi)**(1./3.)
 
 ! Look in the interval 0.1*sigma0 to 2*sigma0 for a good staring guess
 ! for the minimization. We look at N_dim^N_sg points in this interval with exponential
@@ -197,7 +196,7 @@ subroutine get_omega(this_group, ngroups, natoms_in_group, volume_group, sigma_g
   real*8 :: omega
   real*8 :: volume_group(:), sigma_group(:), mass_group(:)
   integer :: ngroups, j, this_group
-  integer :: natoms_in_group(:)
+  real*8 :: natoms_in_group(:)
   character*1 :: mode
 
   omega = 0.d0
@@ -242,8 +241,8 @@ subroutine get_compressibility(nsupergroups, ngroups_in_supergroup, V, sigma, f,
 
   implicit none
 
-  integer, intent(in) :: nsupergroups, ngroups_in_supergroup(:)
-  real*8, intent(in) :: V, sigma(:), f(:)
+  integer, intent(in) :: nsupergroups
+  real*8, intent(in) :: V, sigma(:), f(:), ngroups_in_supergroup(:)
   real*8, intent(out) :: z, xi
   integer :: i, j, k
   real*8 :: pi, ngroups, sum, y1, y2, y3
@@ -254,21 +253,21 @@ subroutine get_compressibility(nsupergroups, ngroups_in_supergroup, V, sigma, f,
   allocate( xi_i(1:nsupergroups) )
   allocate( delta(1:nsupergroups, 1:nsupergroups) )
 
-  xi_i(1:nsupergroups) = pi / 6.d0 * f(1:nsupergroups) * dfloat(ngroups_in_supergroup(1:nsupergroups)) &
+  xi_i(1:nsupergroups) = pi / 6.d0 * f(1:nsupergroups) * ngroups_in_supergroup(1:nsupergroups) &
                          / V * sigma(1:nsupergroups)**3
 
   ngroups = 0.d0
   xi = 0.d0
   do i = 1, nsupergroups
     xi = xi + xi_i(i)
-    ngroups = ngroups + f(i) * dfloat(ngroups_in_supergroup(i))
+    ngroups = ngroups + f(i) * ngroups_in_supergroup(i)
   end do
 
   delta = 0.d0
   do i = 1, nsupergroups
     do j = i+1, nsupergroups
       delta(i,j) = dsqrt(xi_i(i) * xi_i(j)) / xi * (sigma(i) - sigma(j))**2 / sigma(i) / sigma(j) * &
-                   dsqrt(f(i) * dfloat(ngroups_in_supergroup(i)) * f(j) * dfloat(ngroups_in_supergroup(j))) / &
+                   dsqrt(f(i) * ngroups_in_supergroup(i) * f(j) * ngroups_in_supergroup(j)) / &
                    ngroups
       delta(j,i) = delta(i,j)
     end do
@@ -294,7 +293,7 @@ subroutine get_compressibility(nsupergroups, ngroups_in_supergroup, V, sigma, f,
 
   y3 = 0.d0
   do i = 1, nsupergroups
-    y3 = y3 + (xi_i(i) / xi)**(2.d0/3.d0) * (f(i) * dfloat(ngroups_in_supergroup(i)) / ngroups)**(1.d0/3.d0)
+    y3 = y3 + (xi_i(i) / xi)**(2.d0/3.d0) * (f(i) * ngroups_in_supergroup(i) / ngroups)**(1.d0/3.d0)
   end do
   y3 = y3**3
 
@@ -325,15 +324,15 @@ subroutine HS_res(nsupergroups, ngroups_in_supergroup, s0, T, M, N_DoF, V, V_par
   implicit none
 
   real*8 ::  s0(:), N_DoF(:), M(:), f(:), sigma(:), V_partial(:)
-  real*8 :: xi, res, pi, V, kB, T, z, temp, alpha
-  integer :: ngroups_in_supergroup(:), nsupergroups
+  real*8 :: xi, res, pi, V, kB, T, z, temp, alpha, ngroups_in_supergroup(:)
+  integer :: nsupergroups
   integer :: i, j
   real*8, allocatable :: D(:), D0(:), z_i(:), xi_i(:), omega(:)
 
   interface
     subroutine get_compressibility(nsupergroups, ngroups_in_supergroup, V, sigma, f, xi, z)
-      integer, intent(in) :: nsupergroups, ngroups_in_supergroup(:)
-      real*8, intent(in) :: V, sigma(:), f(:)
+      integer, intent(in) :: nsupergroups
+      real*8, intent(in) :: V, sigma(:), f(:), ngroups_in_supergroup(:)
       real*8, intent(out) :: z, xi
     end subroutine
 
@@ -341,7 +340,7 @@ subroutine HS_res(nsupergroups, ngroups_in_supergroup, s0, T, M, N_DoF, V, V_par
       real*8, intent(out) :: omega
       real*8, intent(in) :: volume_group(:), sigma_group(:), mass_group(:)
       integer, intent(in) :: ngroups, this_group
-      integer, intent(in) :: n_in_group(:)
+      real*8, intent(in) :: n_in_group(:)
       character*1, intent(in) :: mode
     end subroutine
   end interface
@@ -362,11 +361,11 @@ subroutine HS_res(nsupergroups, ngroups_in_supergroup, s0, T, M, N_DoF, V, V_par
   do i = 1, nsupergroups
 !   Get fluidicity from D(N) and D0(N)
     call get_diffusivity(s0(i), T, M(i), N_DoF(i), D(i))
-    call get_zero_pressure_diffusivity(sigma(i), omega(i), T, M(i), dfloat(ngroups_in_supergroup(i)), V, D0(i))
+    call get_zero_pressure_diffusivity(sigma(i), omega(i), T, M(i), ngroups_in_supergroup(i), V, D0(i))
     f(i) = D(i)/D0(i)
 !   Get D(f*N) and D0(f*N)
     call get_diffusivity(s0(i), T, M(i), f(i)*N_DoF(i), D(i))
-    call get_zero_pressure_diffusivity(sigma(i), omega(i), T, M(i), f(i)*dfloat(ngroups_in_supergroup(i)), V, D0(i))
+    call get_zero_pressure_diffusivity(sigma(i), omega(i), T, M(i), f(i)*ngroups_in_supergroup(i), V, D0(i))
 !   Get partial compressibility
     call get_compressibility(1, ngroups_in_supergroup(i:i), V_partial(i), sigma(i:i), f(i:i), xi_i(i), z_i(i))
 !   Update residual with the difference between the actual D(f*N)/D0(f*N) ratio and that
@@ -525,7 +524,7 @@ end subroutine
 
 
 
-subroutine get_real_rotational_diffusivity(tau, n, N_DoF, ngroups, group_in_supergroup, j2, w, D)
+subroutine get_real_rotational_diffusivity(tau, n, N_DoF, ngroups, group_in_supergroup, birth_time, death_time, j2, w, D)
 
 !***********************************************************************************
 ! This subroutine calculates the real rotational diffusivity of the
@@ -550,14 +549,16 @@ subroutine get_real_rotational_diffusivity(tau, n, N_DoF, ngroups, group_in_supe
 
   real*8 :: D, N_DoF, tau, S
   real*4 :: w(:,:,:)
-  integer :: n, ngroups, j, k, i, j2, group_in_supergroup(:,:)
+  integer :: n, ngroups, j, k, i, j2, group_in_supergroup(:,:), birth_time(:), death_time(:)
 
   D = 0.d0
   do j = 1, ngroups
     do k = 1, 3
        S = 0.d0
        do i = 1, n
-         S = S + w(group_in_supergroup(j2,j), k, i)
+         if( i >= birth_time(group_in_supergroup(j2,j)) .and. i < death_time(group_in_supergroup(j2,j)) )then
+           S = S + w(group_in_supergroup(j2,j), k, i)
+         end if
        end do
        D = D + S**2
      end do

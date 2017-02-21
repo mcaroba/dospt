@@ -24,32 +24,32 @@ module read_input
 
 ! Variables for grouping interface
   integer :: ngroups, nmasses
-  integer, allocatable :: natoms_in_group(:), atoms_in_group(:,:)
-  real*8, allocatable :: mass_types_values(:), mass_group(:), Sgroup(:,:,:)
+  integer, allocatable :: natoms_in_group(:), atoms_in_group(:,:), atom_belongs_to_group(:)
+  real*8, allocatable :: mass_types_values(:)
   character*16, allocatable :: mass_types(:)
   real*8, allocatable :: symmetry_number_group(:)
+  logical :: check_topology = .true.
 
 ! Supergroup interface
   integer :: nsupergroups = 0
-  integer, allocatable :: ngroups_in_supergroup(:), group_in_supergroup(:,:)
+  integer, allocatable :: ngroups_in_supergroup(:), group_in_supergroup(:,:), group_belongs_to_supergroup(:)
   logical :: calc_supergroups
 
 ! Looping variables
-  integer :: i, i2, j, j2, ios
+  integer :: i, i2, j, j2, ios, k, k2
 
+! Topology interface
+  integer :: nbond_types
+  character*16, allocatable :: bond_type(:,:)
+  real*8, allocatable :: bond_cutoffs(:,:)
+  integer, allocatable :: nspecies_in_topology(:), topology_in_supergroup(:), neach_species_in_topology(:,:)
+  integer :: ntopology_types
+  real*8, allocatable :: symmetry_number_of_topology(:)
+  character*16, allocatable :: species_in_topology(:,:)
 
   contains
 
   subroutine print_welcome_and_read_input()
-
-  interface
-    subroutine sort_supergroups(ngroups, nsupergroups, ngroups_in_supergroup, group_in_supergroup)
-      integer, intent(in) :: ngroups
-      integer, intent(out) :: nsupergroups
-      integer, allocatable, intent(out) :: ngroups_in_supergroup(:), group_in_supergroup(:,:)
-    end subroutine
-  end interface
-
 !******************************************************
 ! Print welcome message, starting time of execution and
 ! read in input options and parameters
@@ -66,14 +66,15 @@ module read_input
   write(*,*)'                                                            |'
   write(*,*)'                                                            |'
   write(*,*)'                    You are using the                       |'
-  write(*,*)'     Density of States (two-) Phase Thermodynamics, v0.1    |'
-  write(*,*)'                     DoSPT v0.1-alpha                       |'
+  write(*,*)'   Density of States (two-) Phase Thermodynamics, v0.1.1    |'
+  write(*,*)'                   DoSPT v0.1.1-alpha                       |'
+  write(*,*)'                    http://dospt.org                        |'
   write(*,*)'                          ...                               |'
   write(*,*)'                Written by Miguel A. Caro                   |'
   write(*,*)'                          ...                               |'
   write(*,*)'                    mcaroba@gmail.com                       |'
   write(*,*)'                          ...                               |'
-  write(*,*)'                 Last updated Sep 2016                      |'
+  write(*,*)'                 Last updated Feb 2017                      |'
   write(*,*)'                                                            |'
   write(*,*)'....................................... ____________________/'
 
@@ -195,11 +196,31 @@ module read_input
   V = L(1) * L(2) * L(3)
 !******************************************************
 
+! The different input files (other than input) must be read in this order
+
+! Read the masses file
+call read_masses()
+
+! Read the groups file
+call read_groups()
+
+! Read the supergroups file
+call read_supergroups()
+
+! Read the topology file
+call read_topology()
+end subroutine
 
 
 
 
 
+
+
+
+
+
+subroutine read_groups()
 !******************************************************
 ! Read in group information
   open(unit=10, file="groups", status="old", iostat=iostatus)
@@ -216,9 +237,8 @@ module read_input
 ! Number of groups in the system
     read(10,*) natoms, ngroups
     allocate( natoms_in_group(1:ngroups) )
-    allocate( mass_group(1:ngroups) )
     allocate( symmetry_number_group(1:ngroups) )
-    allocate( Sgroup(1:ngroups,1:(n+1)/2,1:3) )
+    allocate( atom_belongs_to_group(1:natoms) )
     do i=1,ngroups
       read(10,*) natoms_in_group(i), symmetry_number_group(i)
       read(10,*)
@@ -237,6 +257,12 @@ module read_input
     do i=1,ngroups
       read(10,*)
       read(10,*) ( atoms_in_group(i,j), j = 1, natoms_in_group(i) )
+    end do
+! This variable takes up the atom number and returns the group number (for the group that atom belongs to)
+    do i=1, ngroups
+      do j=1, natoms_in_group(i)
+        atom_belongs_to_group(atoms_in_group(i,j)) = i
+      end do
     end do
 ! Check if same atom shows in more than one group, or more than
 ! once in the same group
@@ -281,12 +307,21 @@ module read_input
   write(*,*)'                                       |'
   write(*,*)'.......................................|'
 !******************************************************
+end subroutine
 
 
 
 
 
 
+subroutine read_supergroups()
+  interface
+    subroutine sort_supergroups(ngroups, nsupergroups, ngroups_in_supergroup, group_in_supergroup)
+      integer, intent(in) :: ngroups
+      integer, intent(out) :: nsupergroups
+      integer, allocatable, intent(out) :: ngroups_in_supergroup(:), group_in_supergroup(:,:)
+    end subroutine
+  end interface
 !******************************************************
 ! Read in supergroup information
   open(unit=10, file="supergroups", status="old", iostat=iostatus)
@@ -307,13 +342,153 @@ module read_input
   else
     close(10)
   end if
+  if( calc_supergroups )then
+! This variable takes up the group number and returns the supergroup number
+    allocate( group_belongs_to_supergroup(1:ngroups) )
+    do i=1, nsupergroups
+      do j=1, ngroups_in_supergroup(i)
+        group_belongs_to_supergroup(group_in_supergroup(i,j)) = i
+      end do
+    end do
+  end if
 !******************************************************
+end subroutine
 
 
 
 
 
+subroutine read_topology()
+!******************************************************
+! Read in topology from file
+  open(unit=10, file="topology", status="old", iostat=iostatus)
+    write(*,*)'                                       |'
+    write(*,*)'Checking topology file...              |'
+    if(iostatus/=0)then
+      close(10)
+      write(*,*)'WARNING: topology file could not be    |'
+      write(*,*)'found. You can safely disregard this   |'
+      write(*,*)'message unless you expect bond breaking|'
+      write(*,*)'in your simulation.                    |'
+      write(*,*)'                                       |'
+      write(*,*)'.......................................|'
+      check_topology = .false.
+    else
+      nbond_types = 0
+      do
+        read(10,*,iostat=ios) keyword
+        if (ios/=0) exit
+        if( keyword == "bond" )then
+          nbond_types = nbond_types + 1
+        end if
+      end do
+      allocate( bond_type(1:nbond_types, 1:2) )
+      allocate( bond_cutoffs(1:nbond_types, 1:2) )
+      nbond_types = 0
+      rewind(10)
+      do
+        read(10,*,iostat=ios) keyword
+        if (ios/=0) exit
+        if( keyword == "bond" )then
+          nbond_types = nbond_types + 1
+          backspace(10)
+! WARNING: YOU SHOULD FIX THIS
+! The code should assert that bond_cutoffs(:,2) >= bond_cutoffs(:,1), that is, the bond creation
+! should never happen at a larger cutoff than the bond breaking, otherwise the
+! code will go crazy
+          read(10,*) keyword, bond_type(nbond_types,1:2), bond_cutoffs(nbond_types,1:2)
+        end if
+      end do
+!     Check new group topologies and asignment to supergroups
+      rewind(10)
+      ntopology_types = 0
+      do
+        read(10,*,iostat=ios) keyword
+        if (ios/=0) exit
+        if( keyword == "group" )then
+          ntopology_types = ntopology_types + 1
+        end if
+      end do
+      allocate( nspecies_in_topology(1:ntopology_types) )
+      allocate( symmetry_number_of_topology(1:ntopology_types) )
+      allocate( topology_in_supergroup(1:ntopology_types) )
+      rewind(10)
+!     k is the largest number of different species in a group; for memory allocation purposes
+      k = 0
+      j2 = 0
+      do
+        read(10,*,iostat=ios) keyword
+        if (ios/=0) exit
+        if( keyword == "group" )then
+          j2 = j2 + 1
+          backspace(10)
+          j = 0
+          k2 = 0
+          do while( keyword /= "sym" )
+            j = j + 1
+            read(10, *) ( keyword, i = 1, j + 1)
+            backspace(10)
+            if( keyword /= "sym" )then
+              do i2 = 1, nmasses
+                if( keyword == mass_types(i2) )then
+                  k2 = k2 + 1
+                end if
+              end do
+            end if
+          end do
+          nspecies_in_topology(j2) = k2
+          if( k2 > k )then
+            k = k2
+          end if
+          read(10,*)
+        end if
+      end do
+      allocate( species_in_topology(1:ntopology_types, 1:k) )
+      allocate( neach_species_in_topology(1:ntopology_types, 1:k) )
+      rewind(10)
+      i = 0
+      do
+        read(10,*,iostat=ios) keyword
+        if (ios/=0) exit
+        if( keyword == "group" )then
+          i = i + 1
+          backspace(10)
+          do j = 1, nspecies_in_topology(i)
+            read(10,*) keyword, (keyword, k = 1, 2*(j-1)), species_in_topology(i, j), neach_species_in_topology(i, j)
+            backspace(10)
+          end do
+          read(10,*) (keyword, k = 1, 2*nspecies_in_topology(i) + 1), keyword, symmetry_number_of_topology(i), &
+                     keyword, topology_in_supergroup(i)
+        end if
+      end do
+!     Increase number of supergroups
+      do i = 1, ntopology_types
+        if( topology_in_supergroup(i) > nsupergroups )then
+          nsupergroups = topology_in_supergroup(i)
+        end if
+      end do
+    end if
+  close(10)
+  do i = 1, nbond_types
+    if( i == 1 )then
+      write(*,*)'                                       |'
+      write(*,*)'The following bond types were found in |'
+      write(*,*)'the topology file:                     |'
+      write(*,*)'                                       |'
+    end if
+      write(*,'(1X,A4,A,A4,A,F5.3,A,F5.3,A)') trim(bond_type(i,1)), ' <-> ', adjustl(bond_type(i,2)), &
+           ' Cuts.: (', bond_cutoffs(i,1), ', ', bond_cutoffs(i,2), ') nm |'
+  end do
+  write(*,*)'                                       |'
+  write(*,*)'.......................................|'
+!******************************************************
+  end subroutine
 
+
+  
+
+
+  subroutine read_masses()
 !******************************************************
 ! Read in masses from user's library
   open(unit=10, file="masses", status="old", iostat=iostatus)
@@ -349,5 +524,7 @@ module read_input
   write(*,*)'.......................................|'
 !******************************************************
   end subroutine
+
+
 
   end module
