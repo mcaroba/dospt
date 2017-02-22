@@ -70,7 +70,7 @@ program DOSPT
 ! program execution
   implicit none
 
-  integer :: k3, k4, n_volumes, Ng, niter, di_volumes, n_prev
+  integer :: k3, k4, n_volumes, Ng, niter, di_volumes, n_prev, imax
   real*8, allocatable :: wsave(:), r(:), rw(:), r2(:), Nsg
   real*4, allocatable :: velocities(:,:,:), positions(:,:,:)
   real*8 :: temp(1:6), update_bar, res, D_rot_real, D_ideal, D_rot_ideal, sigma_eff, ngroups_eff = 0.d0
@@ -652,9 +652,9 @@ end interface
   Stotal = 0.d0
   do j=1,ngroups
     do k2=1,3
-      Stotal(1,k2) = Stotal(1,k2) + Sgroup(j,1,k2)
+      Stotal(1,k2) = Stotal(1,k2) + weight_group(j) * Sgroup(j,1,k2)
       do i=2,(n+1)/2
-        Stotal(i,k2) = Stotal(i,k2) + Sgroup(j,i,k2)
+        Stotal(i,k2) = Stotal(i,k2) + weight_group(j) * Sgroup(j,i,k2)
       end do
     end do
   end do
@@ -740,13 +740,20 @@ end interface
   k2 = 1
 !
   write(10,*) "# Total density of states for all the groups involved"
-  do i=1,(n+1)/2
+! FIX THIS. MAKE IT POSSIBLE FOR THE USER TO CHANGE MAX CUTOFF FOR DoS OUTPUT
+! Choose upper cutoff for DoS printing
+  if( .true. )then
+    imax = int(150.d0 * tau) - 1
+  else
+    imax = (n+1)/2
+  end if
+  do i=1,imax
     write(10, *) dfloat(i-1)/tau, conv1 * twobykT * Stotal(i,1), conv1 * twobykT * Stotal(i,2), conv1 * twobykT * Stotal(i,3)
   end do
   do j=1,ngroups
     write(10,*) 
     write(10,*) "# Density of states (in ps) for group", j
-    do i=1,(n+1)/2
+    do i=1,imax
 !     Update progress bar every ngroups*n/36 iterations
       if(dfloat((j-1)*(n+1)/2+i) > dfloat(k2)*update_bar)then
         write(*,'(A)', advance='no')'='
@@ -775,7 +782,7 @@ end interface
 !
     do j=1,nsupergroups
       write(10,*) "# Density of states (in ps) for supergroup", j
-      do i=1,(n+1)/2
+      do i=1,imax
 !     Update progress bar every ngroups*n/36 iterations
         if(dfloat((j-1)*(n+1)/2+i) > dfloat(k2)*update_bar)then
           write(*,'(A)', advance='no')'='
@@ -833,7 +840,7 @@ end interface
 !       Available for testing and debugging purposes.
 !       Calculate Delta:
         call get_omega(j, ngroups, dfloat(1+0*natoms_in_group), volume_group, sigma_group(1:ngroups,k), mass_group, "v", omega)
-        call get_delta(conv1 * twobykT * Sgroup(j,1,k), T, conv2, dfloat(natoms_in_group(j)), 1.d0, &
+        call get_delta(conv1 * twobykT * Sgroup(j,1,k), T, conv2, 1.d0, &
                        degf_group(j,k), mass_group(j), V, delta_group(j,k), omega)
 !       And f:
         call find_f(delta_group(j,k), f_group(j,k))
@@ -903,7 +910,7 @@ end interface
                            sigma_supergroup(1:nsupergroups,k), mass_supergroup, "v", omega)
             temp(1) = V
           end if
-          call get_delta(conv1 * twobykT * Ssupergroup(j,1,k), T, conv2, natoms_in_supergroup(j), ngroups_in_supergroup_eff(j), &
+          call get_delta(conv1 * twobykT * Ssupergroup(j,1,k), T, conv2, ngroups_in_supergroup_eff(j), &
                          degf_supergroup(j,k), mass_supergroup(j), temp(1), delta_supergroup(j,k), omega)
 !         And f:
           call find_f(delta_supergroup(j,k), f_supergroup(j,k))
@@ -1638,13 +1645,13 @@ end subroutine
 
 
 
-subroutine get_delta(s0, T, conv2, natoms, nparticles, degf_group, mass_group, V, delta, &
+subroutine get_delta(s0, T, conv2, nparticles, degf_group, mass_group, V, delta, &
                      omega)
 
   implicit none
 
   real*8 :: delta, s0, conv2, mass_group, T, V, degf_group
-  real*8 :: natoms, nparticles
+  real*8 :: nparticles
   real*8 :: pi, kB, omega, n1, n2
 
   pi = dacos(-1.d0)

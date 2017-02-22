@@ -84,28 +84,55 @@ end interface
 !   Check if any group has broken
     do k = 1, ngroups
       if( group_still_exists(k) )then
-        loop1: do i = 1, natoms_in_group(k)
-          do j = i+1, natoms_in_group(k)
-            i2 = atoms_in_group(k,i)
-            j2 = atoms_in_group(k,j)
-            do l = 1, nbond_types
-              if( (species(i2) == bond_type(l, 1) .and. species(j2) == bond_type(l, 2)) .or. &
-                  (species(i2) == bond_type(l, 2) .and. species(j2) == bond_type(l, 1)) )then
-                call get_distance( (/ positions(i2,1:3,step) /), (/ positions(j2,1:3,step) /), L_cell, d)
-                if( d >= bond_cutoffs(l, 2) )then
-                  topology_has_changed = .true.
-                  group_still_exists(k) = .false.
+!       First we should check for one-atom groups whether this atoms is stray and could be
+!       bonded to something
+        if( natoms_in_group(k) == 1 )then
+          i = atoms_in_group(k,1)
+          loop4: do j = 1, natoms
+            if( i /= j )then
+              do l = 1, nbond_types
+                if( (species(i) == bond_type(l, 1) .and. species(j) == bond_type(l, 2)) .or. &
+                    (species(i) == bond_type(l, 2) .and. species(j) == bond_type(l, 1)) )then
+                  call get_distance( (/ positions(i,1:3,step) /), (/ positions(j,1:3,step) /), L_cell, d)
+                  if( d < bond_cutoffs(l, 1) )then
+                    topology_has_changed = .true.
+                    group_still_exists(k) = .false.
 ! COMMENT THIS PRINTING OUT IN PUBLIC VERSION OF CODE
-!                  write(*,*) "group", k, "is broken at step", step
-                  rebuild_groups = .true.
-                  broken_message = .true.
-                  death_time(k) = step
-                  exit loop1
+!                    write(*,*) "group", k, "is broken at step", step
+                    rebuild_groups = .true.
+                    broken_message = .true.
+                    death_time(k) = step
+                    exit loop4
+                  end if
                 end if
-              end if
+              end do
+            end if
+          end do loop4
+!       Now we check groups with more than one atom
+        else
+          loop1: do i = 1, natoms_in_group(k)
+            do j = i+1, natoms_in_group(k)
+              i2 = atoms_in_group(k,i)
+              j2 = atoms_in_group(k,j)
+              do l = 1, nbond_types
+                if( (species(i2) == bond_type(l, 1) .and. species(j2) == bond_type(l, 2)) .or. &
+                    (species(i2) == bond_type(l, 2) .and. species(j2) == bond_type(l, 1)) )then
+                  call get_distance( (/ positions(i2,1:3,step) /), (/ positions(j2,1:3,step) /), L_cell, d)
+                  if( d >= bond_cutoffs(l, 2) )then
+                    topology_has_changed = .true.
+                    group_still_exists(k) = .false.
+! COMMENT THIS PRINTING OUT IN PUBLIC VERSION OF CODE
+!                    write(*,*) "group", k, "is broken at step", step
+                    rebuild_groups = .true.
+                    broken_message = .true.
+                    death_time(k) = step
+                    exit loop1
+                  end if
+                end if
+              end do
             end do
-          end do
-        end do loop1
+          end do loop1
+        end if
       end if
     end do
 
