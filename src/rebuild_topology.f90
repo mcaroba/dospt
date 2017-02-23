@@ -37,7 +37,7 @@ subroutine rebuild_topology(nsteps, natoms, ngroups, nsupergroups, L_cell, posit
   integer, allocatable :: neach_species_in_topology_temp(:,:), group_belongs_to_supergroup(:), ngroups_in_supergroup_temp(:), &
                           group_in_supergroup_temp(:,:), group_belongs_to_supergroup_temp(:), birth_time_temp(:), &
                           death_time_temp(:)
-  logical :: topology_match
+  logical :: topology_match, broken_bond
 
 interface
 subroutine get_distance(pos1, pos2, L, d)
@@ -110,28 +110,36 @@ end interface
           end do loop4
 !       Now we check groups with more than one atom
         else
-          loop1: do i = 1, natoms_in_group(k)
-            do j = i+1, natoms_in_group(k)
+          loop6: do i = 1, natoms_in_group(k)
+!           We need to make sure that all the atoms are bonded to at least some other atom within the
+!           group, according to the provided topology. By default the bonds are broken.
+            broken_bond = .true.
+            loop1: do j = 1, natoms_in_group(k)
               i2 = atoms_in_group(k,i)
               j2 = atoms_in_group(k,j)
               do l = 1, nbond_types
                 if( (species(i2) == bond_type(l, 1) .and. species(j2) == bond_type(l, 2)) .or. &
                     (species(i2) == bond_type(l, 2) .and. species(j2) == bond_type(l, 1)) )then
                   call get_distance( (/ positions(i2,1:3,step) /), (/ positions(j2,1:3,step) /), L_cell, d)
-                  if( d >= bond_cutoffs(l, 2) )then
-                    topology_has_changed = .true.
-                    group_still_exists(k) = .false.
-! COMMENT THIS PRINTING OUT IN PUBLIC VERSION OF CODE
-!                    write(*,*) "group", k, "is broken at step", step
-                    rebuild_groups = .true.
-                    broken_message = .true.
-                    death_time(k) = step
+!                 If this pair of atoms is bonded we check the next pair
+                  if( i2 /= j2 .and. d < bond_cutoffs(l, 2) )then
+                    broken_bond = .false.
                     exit loop1
                   end if
                 end if
               end do
-            end do
-          end do loop1
+            end do loop1
+            if( broken_bond )then
+              topology_has_changed = .true.
+              group_still_exists(k) = .false.
+! COMMENT THIS PRINTING OUT IN PUBLIC VERSION OF CODE
+!              write(*,*) "group", k, "is broken at step", step
+              rebuild_groups = .true.
+              broken_message = .true.
+              death_time(k) = step
+              exit loop6
+            end if
+          end do loop6
         end if
       end if
     end do

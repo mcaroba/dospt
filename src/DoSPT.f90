@@ -736,7 +736,7 @@ end interface
   write(*,*)'Progress:                              |'
   write(*,*)'                                       |'
   write(*,'(1X,A)',advance='no')'['
-  update_bar = dfloat(ngroups*(n+1)/2)/36.d0
+  update_bar = dfloat(ngroups*imax)/36.d0
   k2 = 1
 !
   write(10,*) "# Total density of states for all the groups involved"
@@ -755,7 +755,7 @@ end interface
     write(10,*) "# Density of states (in ps) for group", j
     do i=1,imax
 !     Update progress bar every ngroups*n/36 iterations
-      if(dfloat((j-1)*(n+1)/2+i) > dfloat(k2)*update_bar)then
+      if(dfloat((j-1)*imax+i) > dfloat(k2)*update_bar)then
         write(*,'(A)', advance='no')'='
         k2 = k2 + 1
       end if
@@ -777,14 +777,14 @@ end interface
     write(*,*)'Progress:                              |'
     write(*,*)'                                       |'
     write(*,'(1X,A)',advance='no')'['
-    update_bar = dfloat(nsupergroups*(n+1)/2)/36.d0
+    update_bar = dfloat(nsupergroups*imax)/36.d0
     k2 = 1
 !
     do j=1,nsupergroups
       write(10,*) "# Density of states (in ps) for supergroup", j
       do i=1,imax
 !     Update progress bar every ngroups*n/36 iterations
-        if(dfloat((j-1)*(n+1)/2+i) > dfloat(k2)*update_bar)then
+        if(dfloat((j-1)*imax+i) > dfloat(k2)*update_bar)then
           write(*,'(A)', advance='no')'='
           k2 = k2 + 1
         end if
