@@ -727,6 +727,13 @@ end interface
 
 !******************************************************
 ! Write DoS to file
+! FIX THIS. MAKE IT POSSIBLE FOR THE USER TO CHANGE MAX CUTOFF FOR DoS OUTPUT
+! Choose upper cutoff for DoS printing
+  if( .true. )then
+    imax = int(150.d0 * tau) - 1
+  else
+    imax = (n+1)/2
+  end if
   if(write_dos)then
   open(unit=10, file="dos", status="unknown")
 !
@@ -740,13 +747,6 @@ end interface
   k2 = 1
 !
   write(10,*) "# Total density of states for all the groups involved"
-! FIX THIS. MAKE IT POSSIBLE FOR THE USER TO CHANGE MAX CUTOFF FOR DoS OUTPUT
-! Choose upper cutoff for DoS printing
-  if( .true. )then
-    imax = int(150.d0 * tau) - 1
-  else
-    imax = (n+1)/2
-  end if
   do i=1,imax
     write(10, *) dfloat(i-1)/tau, conv1 * twobykT * Stotal(i,1), conv1 * twobykT * Stotal(i,2), conv1 * twobykT * Stotal(i,3)
   end do

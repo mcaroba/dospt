@@ -11,7 +11,7 @@ subroutine rebuild_topology(nsteps, natoms, ngroups, nsupergroups, L_cell, posit
 
 ! In and out variables
   integer :: nsteps, natoms, ngroups, nbond_types, nsupergroups
-  real*8 :: L_cell(1:3), bond_cutoffs(:,:)
+  real*8 :: L_cell(1:3), bond_cutoffs(:,:), update_bar
   real*8, allocatable :: symmetry_number_group(:)
   real*4 :: positions(:,:,:)
   character*16 :: species(:), bond_type(:,:)
@@ -25,7 +25,7 @@ subroutine rebuild_topology(nsteps, natoms, ngroups, nsupergroups, L_cell, posit
   logical :: topology_has_changed
 
 ! Internal variables
-  integer :: i, j, k, iostatus, i2, j2, l, i3, step, ios
+  integer :: i, j, k, iostatus, i2, j2, l, i3, step, ios, k2
   integer :: new_groups
   logical, allocatable :: group_still_exists(:), group_still_exists_temp(:)
   logical :: rebuild_groups = .false., broken_message = .false., repeat_broken_message = .true.
@@ -37,13 +37,21 @@ subroutine rebuild_topology(nsteps, natoms, ngroups, nsupergroups, L_cell, posit
   integer, allocatable :: neach_species_in_topology_temp(:,:), group_belongs_to_supergroup(:), ngroups_in_supergroup_temp(:), &
                           group_in_supergroup_temp(:,:), group_belongs_to_supergroup_temp(:), birth_time_temp(:), &
                           death_time_temp(:)
-  logical :: topology_match, broken_bond
+  logical :: topology_match, broken_bond, atom_reallocated, print_bar = .false.
+  logical, allocatable :: atom_visited(:), atoms_bonded(:,:)
 
 interface
 subroutine get_distance(pos1, pos2, L, d)
   real*8, intent(out) :: d
   real*8, intent(in)  :: L(1:3)
   real*4, intent(in)  :: pos1(1,1:3,1), pos2(1,1:3,1)
+end subroutine
+
+subroutine find_neighbors(i, j, natoms, atoms_bonded, atom_visited, atom_belongs_to_new_group, new_groups)
+  integer, intent(in) :: i, j, natoms, new_groups
+  integer, intent(inout) :: atom_belongs_to_new_group(:)
+  logical, intent(inout) :: atom_visited(:)
+  logical, intent(in) :: atoms_bonded(:,:)
 end subroutine
 end interface
 
@@ -68,6 +76,16 @@ end interface
   allocate( death_time_temp(1:1) )
 
 
+! Bonding search arrays initialization
+  allocate( atom_visited(1:natoms) )
+  atom_visited = .false.
+  allocate( atoms_bonded(1:natoms, 1:natoms) )
+  atoms_bonded = .false.
+
+
+  update_bar = dfloat(nsteps)/36.d0
+  k2 = 0
+
 
   call system("rm -rf topol; mkdir -p topol")
 
@@ -77,19 +95,17 @@ end interface
   write(*,*)'specified topology...                  |'
   write(*,*)'                                       |'
 
-
   do step = 1, nsteps
 
 
 !   Check if any group has broken
     do k = 1, ngroups
       if( group_still_exists(k) )then
-!       First we should check for one-atom groups whether this atoms is stray and could be
-!       bonded to something
-        if( natoms_in_group(k) == 1 )then
-          i = atoms_in_group(k,1)
-          loop4: do j = 1, natoms
-            if( i /= j )then
+!       First we should check for groups whose atoms are within bonding distance from another atom in a different group
+        loop4: do i2 = 1, natoms_in_group(k)
+          i = atoms_in_group(k,i2)
+          do j = 1, natoms
+            if( atom_belongs_to_group(i) /= atom_belongs_to_group(j) )then
               do l = 1, nbond_types
                 if( (species(i) == bond_type(l, 1) .and. species(j) == bond_type(l, 2)) .or. &
                     (species(i) == bond_type(l, 2) .and. species(j) == bond_type(l, 1)) )then
@@ -107,45 +123,45 @@ end interface
                 end if
               end do
             end if
-          end do loop4
-!       Now we check groups with more than one atom
-        else
-          loop6: do i = 1, natoms_in_group(k)
-!           We need to make sure that all the atoms are bonded to at least some other atom within the
-!           group, according to the provided topology. By default the bonds are broken.
-            broken_bond = .true.
-            loop1: do j = 1, natoms_in_group(k)
-              i2 = atoms_in_group(k,i)
-              j2 = atoms_in_group(k,j)
-              do l = 1, nbond_types
-                if( (species(i2) == bond_type(l, 1) .and. species(j2) == bond_type(l, 2)) .or. &
-                    (species(i2) == bond_type(l, 2) .and. species(j2) == bond_type(l, 1)) )then
-                  call get_distance( (/ positions(i2,1:3,step) /), (/ positions(j2,1:3,step) /), L_cell, d)
-!                 If this pair of atoms is bonded we check the next pair
-                  if( i2 /= j2 .and. d < bond_cutoffs(l, 2) )then
-                    broken_bond = .false.
-                    exit loop1
-                  end if
+          end do
+        end do loop4
+      end if
+!     Now we check groups with more than one atom
+      if( group_still_exists(k) .and. natoms_in_group(k) > 1 )then
+        loop6: do i = 1, natoms_in_group(k)
+!         We need to make sure that all the atoms are bonded to at least some other atom within the
+!         group, according to the provided topology. By default the bonds are assumed to be broken.
+          broken_bond = .true.
+          loop1: do j = 1, natoms_in_group(k)
+            i2 = atoms_in_group(k,i)
+            j2 = atoms_in_group(k,j)
+            do l = 1, nbond_types
+              if( (species(i2) == bond_type(l, 1) .and. species(j2) == bond_type(l, 2)) .or. &
+                  (species(i2) == bond_type(l, 2) .and. species(j2) == bond_type(l, 1)) )then
+                call get_distance( (/ positions(i2,1:3,step) /), (/ positions(j2,1:3,step) /), L_cell, d)
+!               If this pair of atoms is bonded we check the next pair
+                if( i2 /= j2 .and. d < bond_cutoffs(l, 2) )then
+                  broken_bond = .false.
+                  exit loop1
                 end if
-              end do
-            end do loop1
-            if( broken_bond )then
-              topology_has_changed = .true.
-              group_still_exists(k) = .false.
+              end if
+            end do
+          end do loop1
+          if( broken_bond )then
+            topology_has_changed = .true.
+            group_still_exists(k) = .false.
 ! COMMENT THIS PRINTING OUT IN PUBLIC VERSION OF CODE
-!              write(*,*) "group", k, "is broken at step", step
-              rebuild_groups = .true.
-              broken_message = .true.
-              death_time(k) = step
-              exit loop6
-            end if
-          end do loop6
-        end if
+!            write(*,*) "group", k, "is broken at step", step
+            rebuild_groups = .true.
+            broken_message = .true.
+            death_time(k) = step
+            exit loop6
+          end if
+        end do loop6
       end if
     end do
 
     if( broken_message .and. step == 1 )then
-      write(*,*)'                                       |'
       write(*,*)'WARNING: your initial groups file is   |'
       write(*,*)'not consistent with the specified      |'
       write(*,*)'topology. I am rebuilding your groups. |'
@@ -154,71 +170,78 @@ end interface
     end if
 
     if( broken_message .and. step > 1 .and. repeat_broken_message )then
-      write(*,*)'                                       |'
       write(*,*)'WARNING: I have detected bonds breaking|'
       write(*,*)'during your simulation. Check out the  |'
       write(*,*)'topol directory to find out at which   |'
       write(*,*)'time step(s) it is happening.          |'
       write(*,*)'                                       |'
-      broken_message = .false.
+      write(*,*)'If you have a complicated system (e.g.,|'
+      write(*,*)'highly mobile protons) this can take a |'
+      write(*,*)'while.                                 |'
+      write(*,*)'                                       |'
+      write(*,*)'Progress:                              |'
+      write(*,*)'                                       |'
+      write(*,'(1X,A)',advance='no')'['
       repeat_broken_message = .false.
+      broken_message = .false.
+      print_bar = .true.
     end if
 
+!   Update progress bar every nsteps/36 iterations
+    if(dfloat(step) > dfloat(k2)*update_bar)then
+      if( print_bar )then
+        write(*,'(A)', advance='no')'='
+      end if
+      k2 = k2 + 1
+    end if
+
+
+
+
+! We fix the bonding info
     if( rebuild_groups )then
-! COMMENT THIS PRINTING OUT IN PUBLIC VERSION OF CODE
-!      write(*,*)
-!      write(*,*) "^-time", step
-!      write(*,*)
-!     Rebuild group list with new bonding info. We check how we can group the atoms from the
-!     broken groups into new or existing groups. Note that once an atoms joins an existing
-!     group this group's topology changes and it becomes a new group.
-!     This is only executed if bonds have broken at this particular time in the dynamics
+      atoms_bonded = .false.
+      do i2 = 1, natoms
+        do j2 = 1, natoms
+!         Make sure i2 and j2 are different atoms
+          if( i2 /= j2 )then
+            do l = 1, nbond_types
+              if( (species(i2) == bond_type(l, 1) .and. species(j2) == bond_type(l, 2)) .or. &
+                  (species(i2) == bond_type(l, 2) .and. species(j2) == bond_type(l, 1)) )then
+                call get_distance( (/ positions(i2,1:3,step) /), (/ positions(j2,1:3,step) /), L_cell, d)
+!               Are i2 and j2 within bond-forming distance?
+                if( d < bond_cutoffs(l, 1) )then
+                  atoms_bonded(i2,j2) = .true.
+!               Are i2 and j2 below bond-breaking distance and are/were they in the same group?
+                else if( d < bond_cutoffs(l, 2) .and. atom_belongs_to_group(i2) == atom_belongs_to_group(j2) )then
+                  atoms_bonded(i2,j2) = .true.
+                end if
+              end if
+            end do
+          end if
+        end do
+      end do
+    end if
+
+
+
+! Now we create the new groups according to the new bonding info
+    if( rebuild_groups )then
       new_groups = 0
       allocate( atom_belongs_to_new_group(1:natoms) )
       atom_belongs_to_new_group = 0
-      do k = 1, ngroups
-!       Only groups that just died are checked. Groups that died at a previous time step should
-!       be left alone, since they have already been dealt with
-        if( .not. group_still_exists(k) .and. death_time(k) == step )then
-          do i = 1, natoms_in_group(k)
-            i2 = atoms_in_group(k,i)
-            loop2: do j2 = 1, natoms
-              if( i2 /= j2 )then
-              do l = 1, nbond_types
-                if( (species(i2) == bond_type(l, 1) .and. species(j2) == bond_type(l, 2)) .or. &
-                    (species(i2) == bond_type(l, 2) .and. species(j2) == bond_type(l, 1)) )then
-                  call get_distance( (/ positions(i2,1:3,step) /), (/ positions(j2,1:3,step) /), L_cell, d)
-                  if( d < bond_cutoffs(l, 1) )then
-!                   If atom i2 is within bonding distance of atom j2, and atom j2's group still exists
-!                   then i2 is added to j2's group and j2's group is relocated and its old tag is terminated
-                    if( group_still_exists(atom_belongs_to_group(j2)) )then
-                      new_groups = new_groups + 1
-                      atom_belongs_to_new_group(i2) = new_groups
-                      do i3 = 1, natoms_in_group(atom_belongs_to_group(j2))
-                        atom_belongs_to_new_group(atoms_in_group(atom_belongs_to_group(j2),i3)) = new_groups
-                      end do
-                      group_still_exists(atom_belongs_to_group(j2)) = .false.
-                      death_time(atom_belongs_to_group(j2)) = step
-!                   If i2 cannot join a preexisting group but j2 already belongs to a new group, we add
-!                   i2 to that group
-                    else if( atom_belongs_to_new_group(j2) /= 0 )then
-                      atom_belongs_to_new_group(i2) = atom_belongs_to_new_group(j2)
-!                   Otherwise we have to create a whole new group for i2 and j2
-                    else
-                      new_groups = new_groups + 1
-                      atom_belongs_to_new_group(i2) = new_groups
-                      atom_belongs_to_new_group(j2) = new_groups
-                    end if
-                    exit loop2
-                  end if
-                end if
-              end do            
-              end if
-            end do loop2
+      atom_visited = .false.
+      do i = 1, natoms
+        if( .not. atom_visited(i) .and. .not. group_still_exists(atom_belongs_to_group(i)) .and. &
+            death_time(atom_belongs_to_group(i)) == step )then
+          new_groups = new_groups + 1
+          atom_belongs_to_new_group(i) = new_groups
+          atom_visited(i) = .true.
+          do j = 1, natoms
+            call find_neighbors(i, j, natoms, atoms_bonded, atom_visited, atom_belongs_to_new_group, new_groups)
           end do
         end if
       end do
-
 
 !     Check how many atoms are in each of the new groups
       allocate( natoms_in_new_group(1:new_groups) )
@@ -401,6 +424,13 @@ end interface
 
   end do
 
+  if( print_bar )then
+    do i = k2, 36
+      write(*,'(A1)',advance='no')'='
+    end do
+    write(*,'(A3)')'] |'
+  end if
+
   write(*,*)'                                       |'
   write(*,*)'.......................................|'
 
@@ -492,4 +522,27 @@ subroutine get_distance(pos1, pos2, l, d)
 
   d = sqrt( x**2 + y**2 + z**2)
 
+end subroutine
+
+
+
+
+
+
+
+
+recursive subroutine find_neighbors(i, j, natoms, atoms_bonded, atom_visited, atom_belongs_to_new_group, new_groups)
+
+  implicit none
+
+  integer :: i, j, k, natoms, new_groups, atom_belongs_to_new_group(:)
+  logical :: atom_visited(:), atoms_bonded(:,:)
+
+  if( .not. atom_visited(j) .and. i /= j .and. atoms_bonded(i,j) )then
+    atom_visited(j) = .true.
+    atom_belongs_to_new_group(j) = new_groups
+    do k = 1, natoms
+      call find_neighbors(j, k, natoms, atoms_bonded, atom_visited, atom_belongs_to_new_group, new_groups)
+    end do
+  end if
 end subroutine
