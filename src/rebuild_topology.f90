@@ -5,7 +5,7 @@ subroutine rebuild_topology(nsteps, natoms, ngroups, nsupergroups, L_cell, posit
            group_in_supergroup, ngroups_in_supergroup, group_belongs_to_supergroup, &
            nspecies_in_topology, topology_in_supergroup, neach_species_in_topology, &
            ntopology_types, symmetry_number_of_topology, species_in_topology, &
-           nbond_types, bond_type, bond_cutoffs, birth_time, death_time, topology_has_changed)
+           nbond_types, bond_type, bond_cutoffs, birth_time, death_time, topology_has_changed, keep_groups_together)
 
   implicit none
 
@@ -22,7 +22,7 @@ subroutine rebuild_topology(nsteps, natoms, ngroups, nsupergroups, L_cell, posit
   integer :: ntopology_types
   real*8 :: symmetry_number_of_topology(:)
   character*16 :: species_in_topology(:,:)
-  logical :: topology_has_changed
+  logical :: topology_has_changed, keep_groups_together
 
 ! Internal variables
   integer :: i, j, k, iostatus, i2, j2, l, i3, step, ios, k2
@@ -100,6 +100,7 @@ end interface
 
 !   Check if any group has broken
     do k = 1, ngroups
+!     This block looks for bond formation.
       if( group_still_exists(k) )then
 !       First we should check for groups whose atoms are within bonding distance from another atom in a different group
         loop4: do i2 = 1, natoms_in_group(k)
@@ -126,7 +127,7 @@ end interface
           end do
         end do loop4
       end if
-!     Now we check groups with more than one atom
+!     Now we check for bond breaking within groups with more than one atom
       if( group_still_exists(k) .and. natoms_in_group(k) > 1 )then
         loop6: do i = 1, natoms_in_group(k)
 !         We need to make sure that all the atoms are bonded to at least some other atom within the
@@ -225,7 +226,7 @@ end interface
 
 
 
-! Now we create the new groups according to the new bonding info
+!   Now we create the new groups according to the new bonding info
     if( rebuild_groups )then
       new_groups = 0
       allocate( atom_belongs_to_new_group(1:natoms) )
@@ -250,6 +251,11 @@ end interface
         do j = 1, natoms
           if( atom_belongs_to_new_group(j) == i )then
             k = k + 1
+!           Also make sure all of these groups are properly terminated
+            if( group_still_exists(atom_belongs_to_group(j)) )then
+              group_still_exists(atom_belongs_to_group(j)) = .false.
+              death_time(atom_belongs_to_group(j)) = step
+            end if
           end if
         end do
         natoms_in_new_group(i) = k

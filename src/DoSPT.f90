@@ -46,7 +46,7 @@ program DOSPT
 !                     of Lennard-Jones fluids"                       !
 !                 J. Chem. Phys. 119, 11792 (2003)                   !
 !                                                                    !
-!!!          Distribution last updated on 21 Feb. 2016             !!!
+!!!          Distribution last updated on 24 Feb. 2016             !!!
 !!!!!                                                            !!!!!
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -193,7 +193,7 @@ subroutine rebuild_topology(n, natoms, ngroups, nsupergroups, L, positions, spec
            group_in_supergroup, ngroups_in_supergroup, group_belongs_to_supergroup, &
            nspecies_in_topology, topology_in_supergroup, neach_species_in_topology, &
            ntopology_types, symmetry_number_of_topology, species_in_topology, &
-           nbond_types, bond_type, bond_cutoffs, birth_time, death_time, topology_has_changed)
+           nbond_types, bond_type, bond_cutoffs, birth_time, death_time, topology_has_changed, keep_groups_together)
   integer, intent(in) :: n, natoms, nbond_types, ntopology_types
   integer, intent(inout) :: ngroups, nsupergroups
   real*8, intent(in) :: L(1:3), bond_cutoffs(:,:), symmetry_number_of_topology(:)
@@ -205,6 +205,7 @@ subroutine rebuild_topology(n, natoms, ngroups, nsupergroups, L, positions, spec
   integer, intent(inout) :: ngroups_in_supergroup(:), group_in_supergroup(:,:), group_belongs_to_supergroup(:)
   integer, intent(in) :: nspecies_in_topology(:), topology_in_supergroup(:), neach_species_in_topology(:,:)
   logical, intent(out) :: topology_has_changed
+  logical, intent(in) :: keep_groups_together
 end subroutine
 
 subroutine interpolate_1D(r2, r1, n2, n1, tau2, tau1, f)
@@ -285,7 +286,8 @@ end interface
                           group_in_supergroup, ngroups_in_supergroup, group_belongs_to_supergroup, &
                           nspecies_in_topology, topology_in_supergroup, neach_species_in_topology, &
                           ntopology_types, symmetry_number_of_topology, species_in_topology, &
-                          nbond_types, bond_type, bond_cutoffs, birth_time, death_time, topology_has_changed)
+                          nbond_types, bond_type, bond_cutoffs, birth_time, death_time, topology_has_changed, &
+                          keep_groups_together)
   else
     allocate( birth_time(1:ngroups) )
     allocate( death_time(1:ngroups) )

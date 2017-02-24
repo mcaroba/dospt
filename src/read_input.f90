@@ -28,7 +28,7 @@ module read_input
   real*8, allocatable :: mass_types_values(:)
   character*16, allocatable :: mass_types(:)
   real*8, allocatable :: symmetry_number_group(:)
-  logical :: check_topology = .true.
+  logical :: check_topology = .true., keep_groups_together = .false.
 
 ! Supergroup interface
   integer :: nsupergroups = 0
@@ -149,6 +149,9 @@ module read_input
       else if(keyword=='write_dos')then
         backspace(10)
         read(10,*,iostat=iostatus) crap, crap, write_dos
+      else if(keyword=='keep_groups_together')then
+        backspace(10)
+        read(10,*,iostat=iostatus) crap, crap, keep_groups_together
       else if(keyword=='hs_formalism')then
 !       Define the HS formalism, overriding f_opt and f_rot_opt flags
         backspace(10)
