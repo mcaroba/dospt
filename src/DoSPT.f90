@@ -46,7 +46,7 @@ program DOSPT
 !                     of Lennard-Jones fluids"                       !
 !                 J. Chem. Phys. 119, 11792 (2003)                   !
 !                                                                    !
-!!!          Distribution last updated on 24 Feb. 2016             !!!
+!!!          Distribution last updated on 28 Feb. 2016             !!!
 !!!!!                                                            !!!!!
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -188,13 +188,13 @@ subroutine get_real_rotational_diffusivity(tau, n, N_DoF, ngroups, group_in_supe
   real*8, intent(out) :: D
 end subroutine
 
-subroutine rebuild_topology(n, natoms, ngroups, nsupergroups, L, positions, species, &
+subroutine rebuild_topology(n, dstep, natoms, ngroups, nsupergroups, L, positions, species, &
            atoms_in_group, natoms_in_group, symmetry_number_group, atom_belongs_to_group, &
            group_in_supergroup, ngroups_in_supergroup, group_belongs_to_supergroup, &
            nspecies_in_topology, topology_in_supergroup, neach_species_in_topology, &
            ntopology_types, symmetry_number_of_topology, species_in_topology, &
            nbond_types, bond_type, bond_cutoffs, birth_time, death_time, topology_has_changed)
-  integer, intent(in) :: n, natoms, nbond_types, ntopology_types
+  integer, intent(in) :: n, natoms, nbond_types, ntopology_types, dstep
   integer, intent(inout) :: ngroups, nsupergroups
   real*8, intent(in) :: L(1:3), bond_cutoffs(:,:), symmetry_number_of_topology(:)
   real*8, intent(inout) :: symmetry_number_group(:)
@@ -280,7 +280,7 @@ end interface
 !******************************************************
 ! Rebuild topology in case bonds break during the dynamics
   if( check_topology )then
-    call rebuild_topology(n, natoms, ngroups, nsupergroups, L, positions, species, &
+    call rebuild_topology(n, nrebuild_top, natoms, ngroups, nsupergroups, L, positions, species, &
                           atoms_in_group, natoms_in_group, symmetry_number_group, atom_belongs_to_group, &
                           group_in_supergroup, ngroups_in_supergroup, group_belongs_to_supergroup, &
                           nspecies_in_topology, topology_in_supergroup, neach_species_in_topology, &

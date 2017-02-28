@@ -20,7 +20,7 @@ module read_input
   logical :: smooth = .false., estimate_vel = .false., renormalize = .false., vibrational_gas = .false.
   logical :: f_opt = .true., f_rot_opt = .true., write_dos = .true.
   character*3 :: smixture = "mol", hs_formalism
-  integer :: natoms, n = 0, iostatus, execution_error
+  integer :: natoms, n = 0, iostatus, execution_error, nrebuild_top = 1
 
 ! Variables for grouping interface
   integer :: ngroups, nmasses
@@ -149,6 +149,9 @@ module read_input
       else if(keyword=='write_dos')then
         backspace(10)
         read(10,*,iostat=iostatus) crap, crap, write_dos
+      else if(keyword=='nrebuild_top')then
+        backspace(10)
+        read(10,*,iostat=iostatus) crap, crap, nrebuild_top
       else if(keyword=='hs_formalism')then
 !       Define the HS formalism, overriding f_opt and f_rot_opt flags
         backspace(10)

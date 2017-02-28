@@ -1,6 +1,6 @@
 !=================================================================================================
 !=================================================================================================
-subroutine rebuild_topology(nsteps, natoms, ngroups, nsupergroups, L_cell, positions, species, &
+subroutine rebuild_topology(nsteps, dstep, natoms, ngroups, nsupergroups, L_cell, positions, species, &
            atoms_in_group, natoms_in_group, symmetry_number_group, atom_belongs_to_group, &
            group_in_supergroup, ngroups_in_supergroup, group_belongs_to_supergroup, &
            nspecies_in_topology, topology_in_supergroup, neach_species_in_topology, &
@@ -10,7 +10,7 @@ subroutine rebuild_topology(nsteps, natoms, ngroups, nsupergroups, L_cell, posit
   implicit none
 
 ! In and out variables
-  integer :: nsteps, natoms, ngroups, nbond_types, nsupergroups
+  integer :: nsteps, natoms, ngroups, nbond_types, nsupergroups, dstep
   real*8 :: L_cell(1:3), bond_cutoffs(:,:), update_bar
   real*8, allocatable :: symmetry_number_group(:)
   real*4 :: positions(:,:,:)
@@ -55,8 +55,9 @@ subroutine find_neighbors(i, j, natoms, atoms_bonded, atom_visited, atom_belongs
 end subroutine
 
 subroutine build_bond_list(natoms, atom_belongs_to_group, species, bond_type, bond_cutoffs, positions, &
-                           L_cell, step, atoms_bonded)
+                           L_cell, step, atoms_bonded_prev, atoms_bonded, initialize)
   logical, intent(inout) :: atoms_bonded(:,:)
+  logical, intent(in) :: atoms_bonded_prev(:,:), initialize
   integer, intent(in) :: natoms, step, atom_belongs_to_group(:)
   character*16, intent(in) :: species(:), bond_type(:,:)
   real*4, intent(in) :: positions(:,:,:)
@@ -91,7 +92,7 @@ end interface
   allocate( atoms_bonded(1:natoms, 1:natoms) )
   atoms_bonded = .false.
   allocate( atoms_bonded_prev(1:natoms, 1:natoms) )
-  atoms_bonded = .false.
+  atoms_bonded_prev = .false.
 
 
 
@@ -108,7 +109,7 @@ end interface
 ! Check initial consistency between groups and topology files
   step = 1
   call build_bond_list(natoms, atom_belongs_to_group, species, bond_type, bond_cutoffs, positions, &
-                       L_cell, step, atoms_bonded)
+                       L_cell, step, atoms_bonded_prev, atoms_bonded, .true.)
   allocate( atom_belongs_to_new_group(1:natoms) )
   do i = 1, natoms
 !   Find all the atoms which can be connected to i
@@ -184,7 +185,7 @@ end interface
 
 
 
-  do step = 1, nsteps
+  do step = 1, nsteps, dstep
 
 !   Update progress bar every nsteps/36 iterations
     if(dfloat(step) > dfloat(k2)*update_bar)then
@@ -196,7 +197,7 @@ end interface
     atoms_bonded_prev = atoms_bonded
     if( step > 1 )then
       call build_bond_list(natoms, atom_belongs_to_group, species, bond_type, bond_cutoffs, positions, &
-                           L_cell, step, atoms_bonded)
+                           L_cell, step, atoms_bonded_prev, atoms_bonded, .false.)
       do i = 1, natoms
         do j = i+1, natoms
 !         If bonding info has changed, kill groups involved
@@ -468,11 +469,11 @@ end subroutine
 
 
 subroutine build_bond_list(natoms, atom_belongs_to_group, species, bond_type, bond_cutoffs, positions, &
-                           L_cell, step, atoms_bonded)
+                           L_cell, step, atoms_bonded_prev, atoms_bonded, initialize)
 
   implicit none
 
-  logical :: atoms_bonded(:,:)
+  logical :: atoms_bonded(:,:), atoms_bonded_prev(:,:), initialize
   integer :: natoms, i2, j2, l, step, nbond_types, atom_belongs_to_group(:)
   character*16 :: species(:), bond_type(:,:)
   real*4 :: positions(:,:,:)
@@ -501,8 +502,12 @@ end interface
             if( d < bond_cutoffs(l, 1) )then
               atoms_bonded(i2,j2) = .true.
               atoms_bonded(j2,i2) = .true.
-!           Are i2 and j2 below bond-breaking distance and are/were they in the same group?
-            else if( d < bond_cutoffs(l, 2) .and. atom_belongs_to_group(i2) == atom_belongs_to_group(j2) )then
+!           Are i2 and j2 below bond-breaking distance and were they bonded before?
+            else if( d < bond_cutoffs(l, 2) .and. initialize .and. atom_belongs_to_group(i2) == atom_belongs_to_group(j2) )then
+              atoms_bonded(i2,j2) = .true.
+              atoms_bonded(j2,i2) = .true.
+!           Are i2 and j2 below bond-breaking distance and were they bonded before?
+            else if( d < bond_cutoffs(l, 2) .and. atoms_bonded_prev(i2,j2) )then
               atoms_bonded(i2,j2) = .true.
               atoms_bonded(j2,i2) = .true.
             end if
