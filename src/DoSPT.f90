@@ -91,7 +91,7 @@ program DOSPT
   real*8, allocatable :: eig_group(:,:), symmetry_number_supergroup(:)
   character*16 :: mass_label
   character*16, allocatable :: species(:)
-  real*8, allocatable :: delta_group(:,:), degf_group(:,:), degf_supergroup(:,:), weight_group(:)
+  real*8, allocatable :: delta_group(:,:), degf_group(:,:), degf_supergroup(:,:), weight_group(:), weight_supergroup(:)
   real*8, allocatable :: f_group(:,:), f_supergroup(:,:), y_group(:,:), z_group(:,:), mass_group(:)
   real*8, allocatable :: SHSbykB_group(:,:), SHSbykB_supergroup(:,:), SRbykB_group(:), SRbykB_supergroup(:)
   real*8, allocatable :: entropy_group(:,:), entropy_supergroup(:,:), entropy_supergroup_gas(:,:)
@@ -292,11 +292,20 @@ end interface
     birth_time = 1
     death_time = n + 1
   end if
+! Make sure that we don't add unnecessary supergroups unless they are required
+  nsupergroups = size(ngroups_in_supergroup,1)
   allocate( lifetime(1:ngroups) )
   allocate( weight_group(1:ngroups) )
+  allocate( weight_supergroup(1:nsupergroups) )
+  weight_supergroup = 0.d0
   lifetime = death_time - birth_time
   do i = 1, ngroups
     weight_group(i) = dfloat(lifetime(i)) / dfloat(n)
+  end do
+  do i = 1, nsupergroups
+    do j = 1, ngroups_in_supergroup(i)
+      weight_supergroup(i) = weight_supergroup(i) + weight_group(group_in_supergroup(i,j))
+    end do
   end do
 ! If the topology has not been rebuilt, then we return the nsupergroups variable to its original
 ! state
@@ -868,13 +877,14 @@ end interface
       end do
     end do
   end if
+! NOTE: I'M NOT OUTPUTTING FLUIDICITIES FOR SINGLE GROUPS ANYMORE, SINCE IT DOESN'T MAKE ANY SENSE
 ! Write to file
   open(unit=10, file="fluidicity_g", status="unknown")
   write(10,*) "# Group no.; effective deg. of freedom [CM; rot; vib]; Voronoi volume (nm^3); &
-               &fluidicity f [CM; rot; vib]"
+               &weight; supergroup"
   do j=1,ngroups
-    write(10,'(I8,2X,F10.4,2X,F10.4,2X,F10.4,2X,F10.4,2X,F6.4,2X,F6.4,2X,F6.4)') &
-          j, degf_group(j,1:3), volume_group(j), f_group(j,1:3)
+    write(10,'(I8,2X,F10.4,2X,F10.4,2X,F10.4,2X,F10.4,2X,F6.4,2X,I8)') &
+          j, degf_group(j,1:3), volume_group(j), weight_group(j), group_belongs_to_supergroup(j)
   end do
   close(10)
 ! Repeat the same as above for supergroups this time
@@ -969,10 +979,10 @@ end interface
 !   Write to file
     open(unit=10, file="fluidicity", status="unknown")
     write(10,*) "# Supergroup no.; effective deg. of freedom [CM; rot; vib]; Voronoi volume (nm^3); &
-                 &fluidicity f [CM; rot; vib]; HS diameters (nm) [CM, rot, vib]"
+                 &fluidicity f [CM; rot; vib]; HS diameters (nm) [CM, rot, vib]; weight"
     do j=1,nsupergroups
-      write(10,'(I8,2X,F10.4,2X,F10.4,2X,F10.4,2X,F10.4,2X,F6.4,2X,F6.4,2X,F6.4,2X,F10.4,2X,F10.4,2X,F10.4)') &
-            j, degf_supergroup(j,1:3), volume_supergroup(j), f_supergroup(j,1:3), sigma_supergroup(j,1:3)
+      write(10,'(I8,2X,F10.4,2X,F10.4,2X,F10.4,2X,F10.4,2X,F6.4,2X,F6.4,2X,F6.4,2X,F10.4,2X,F10.4,2X,F10.4,2X,F12.5)') &
+            j, degf_supergroup(j,1:3), volume_supergroup(j), f_supergroup(j,1:3), sigma_supergroup(j,1:3), weight_supergroup(j)
     end do
   end if
   close(10)
