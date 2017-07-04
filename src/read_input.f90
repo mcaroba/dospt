@@ -507,9 +507,11 @@ subroutine read_topology()
     end if
     nmasses=0
     do
-      read(10,*,iostat=ios)
-      if (ios/=0) exit     
-      nmasses=nmasses+1
+      read(10,*,iostat=ios) keyword_first
+      if(ios/=0)exit
+      if( keyword_first /= "#" )then
+        nmasses=nmasses+1
+      end if
     end do
     allocate( mass_types(1:nmasses) )
     allocate( mass_types_values(1:nmasses) )
@@ -518,9 +520,22 @@ subroutine read_topology()
     write(*,*)'                                       |'
     write(*,*)'    Element (tag);      Mass (amu)     |'
     rewind(10)
-    do i=1,nmasses
-      read(10,*) mass_types(i), mass_types_values(i)
-      write(*,'(1X,A17,F17.2,A)') trim(mass_types(i)), mass_types_values(i),'     |'
+    i = 0
+    do while( i < nmasses )
+      read(10,*) keyword_first
+      if( keyword_first /= "#" )then
+        i = i + 1
+        backspace(10)
+        read(10, *, iostat=ios) mass_types(i), mass_types_values(i)
+        if( ios == 0 )then
+          write(*,'(1X,A17,F17.2,A)') trim(mass_types(i)), mass_types_values(i),'     |'
+        else
+          write(*,*)'                                       |'
+          write(*,*)'WARNING: bad value in "masses" file for|  <-- WARNING'
+          write(*,'(1X,A,A17,A)')'this atom type: ', trim(mass_types(i)), '      |'
+          write(*,*)'                                       |'
+        end if
+      end if
     end do
   close(10)
   write(*,*)'                                       |'

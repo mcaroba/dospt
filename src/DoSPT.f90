@@ -220,7 +220,9 @@ end interface
 
 
 
-
+!******************************************************
+! This is the program workflow. Ideally (i.e., at some point) all the operations performed by the code will be put here
+! and will appear as a sequential call to subroutines contained in different modules.
 !******************************************************
 ! Constants and units initialization (constants.f90)
   call initialize_constants()
