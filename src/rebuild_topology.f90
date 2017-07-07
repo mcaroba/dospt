@@ -1,3 +1,65 @@
+module topology
+
+  use read_input
+  use trajectory
+
+  implicit none
+
+  integer, allocatable :: birth_time(:), death_time(:), lifetime(:)
+  logical :: error = .false., topology_has_changed = .false., interpolate_dos = .false.
+  real*8, allocatable :: weight_group(:), weight_supergroup(:)
+
+
+  contains
+
+!=================================================================================================
+!=================================================================================================
+subroutine sort_out_topology()
+!******************************************************
+! Rebuild topology in case bonds break during the dynamics
+  if( check_topology )then
+    call rebuild_topology(n, nrebuild_top, natoms, ngroups, nsupergroups, L, positions, species, &
+                          atoms_in_group, natoms_in_group, symmetry_number_group, atom_belongs_to_group, &
+                          group_in_supergroup, ngroups_in_supergroup, group_belongs_to_supergroup, &
+                          nspecies_in_topology, topology_in_supergroup, neach_species_in_topology, &
+                          ntopology_types, symmetry_number_of_topology, species_in_topology, &
+                          nbond_types, bond_type, bond_cutoffs, birth_time, death_time, topology_has_changed)
+  else
+    allocate( birth_time(1:ngroups) )
+    allocate( death_time(1:ngroups) )
+    birth_time = 1
+    death_time = n + 1
+  end if
+! Make sure that we don't add unnecessary supergroups unless they are required
+  nsupergroups = size(ngroups_in_supergroup,1)
+  allocate( lifetime(1:ngroups) )
+  allocate( weight_group(1:ngroups) )
+  allocate( weight_supergroup(1:nsupergroups) )
+  weight_supergroup = 0.d0
+  lifetime = death_time - birth_time
+  do i = 1, ngroups
+    weight_group(i) = dfloat(lifetime(i)) / dfloat(n)
+  end do
+  do i = 1, nsupergroups
+    do j = 1, ngroups_in_supergroup(i)
+      weight_supergroup(i) = weight_supergroup(i) + weight_group(group_in_supergroup(i,j))
+    end do
+  end do
+! If the topology has not been rebuilt, then we return the nsupergroups variable to its original
+! state
+  if( .not. topology_has_changed )then
+    nsupergroups = size(ngroups_in_supergroup, 1)
+  end if
+!******************************************************
+end subroutine
+!=================================================================================================
+!=================================================================================================
+
+
+
+
+
+
 !=================================================================================================
 !=================================================================================================
 subroutine rebuild_topology(nsteps, dstep, natoms, ngroups, nsupergroups, L_cell, positions, species, &
@@ -39,31 +101,6 @@ subroutine rebuild_topology(nsteps, dstep, natoms, ngroups, nsupergroups, L_cell
                           death_time_temp(:)
   logical :: topology_match, broken_bond, atom_reallocated, print_bar = .false., match
   logical, allocatable :: atom_visited(:), atoms_bonded(:,:), atoms_bonded_prev(:,:)
-
-interface
-subroutine get_distance(pos1, pos2, L, d)
-  real*8, intent(out) :: d
-  real*8, intent(in)  :: L(1:3)
-  real*4, intent(in)  :: pos1(1,1:3,1), pos2(1,1:3,1)
-end subroutine
-
-subroutine find_neighbors(i, j, natoms, atoms_bonded, atom_visited, atom_belongs_to_new_group, new_groups)
-  integer, intent(in) :: i, j, natoms, new_groups
-  integer, intent(inout) :: atom_belongs_to_new_group(:)
-  logical, intent(inout) :: atom_visited(:)
-  logical, intent(in) :: atoms_bonded(:,:)
-end subroutine
-
-subroutine build_bond_list(natoms, atom_belongs_to_group, species, bond_type, bond_cutoffs, positions, &
-                           L_cell, step, atoms_bonded_prev, atoms_bonded, initialize)
-  logical, intent(inout) :: atoms_bonded(:,:)
-  logical, intent(in) :: atoms_bonded_prev(:,:), initialize
-  integer, intent(in) :: natoms, step, atom_belongs_to_group(:)
-  character*16, intent(in) :: species(:), bond_type(:,:)
-  real*4, intent(in) :: positions(:,:,:)
-  real*8, intent(in) :: L_cell(:), bond_cutoffs(:,:)
-end subroutine
-end interface
 
 
 ! There are no new groups to begin with
@@ -479,14 +516,6 @@ subroutine build_bond_list(natoms, atom_belongs_to_group, species, bond_type, bo
   real*4 :: positions(:,:,:)
   real*8 :: L_cell(:), d, bond_cutoffs(:,:)
 
-interface
-subroutine get_distance(pos1, pos2, L, d)
-  real*8, intent(out) :: d
-  real*8, intent(in)  :: L(1:3)
-  real*4, intent(in)  :: pos1(1,1:3,1), pos2(1,1:3,1)
-end subroutine
-end interface
-
   nbond_types = size(bond_type, 1)
 
   atoms_bonded = .false.
@@ -622,3 +651,7 @@ recursive subroutine find_neighbors(i, j, natoms, atoms_bonded, atom_visited, at
     end do
   end if
 end subroutine
+
+
+
+end module

@@ -1,3 +1,7 @@
+module fluidicity
+
+contains
+
 subroutine fluidicity_calculator(nsupergroups, ngroups_in_supergroup, N_DoF, s0, M, T, V, V_voro, niter, res, sigma, f)
 
   implicit none
@@ -13,36 +17,6 @@ subroutine fluidicity_calculator(nsupergroups, ngroups_in_supergroup, N_DoF, s0,
 !
 ! Variables for estimation of partial volumes using an approach based on vdW radii
 ! real*8, allocatable :: vdw_radii(:), pos(:,:)
-
-!*********************************************
-  interface
-    subroutine spheres_volume(pos, r, N, N_k, V)
-      real*8, intent(in) :: pos(:,:), r(:)
-      real*8, intent(out) :: V
-      integer, intent(in) :: N, N_k
-    end subroutine
-
-    subroutine get_compressibility(nsupergroups, ngroups_in_supergroup, V, sigma, f, xi, z)
-      integer, intent(in) :: nsupergroups
-      real*8, intent(in) :: V, sigma(:), f(:), ngroups_in_supergroup(:)
-      real*8, intent(out) :: z, xi
-    end subroutine
-
-    subroutine HS_res(nsupergroups, ngroups_in_supergroup, s0, T, M, N_DoF, V, V_partial, sigma, f, alpha, res)
-      real*8, intent(in) ::  s0(:), N_DoF(:), M(:), sigma(:), V, V_partial(:), T, alpha, ngroups_in_supergroup(:)
-      real*8, intent(out) :: res, f(:)
-      integer, intent(in) :: nsupergroups
-    end subroutine
-
-    subroutine get_omega(this_group, ngroups, n_in_group, volume_group, sigma_group, mass_group, mode, omega)
-      real*8, intent(out) :: omega
-      real*8, intent(in) :: volume_group(:), sigma_group(:), mass_group(:)
-      integer, intent(in) :: ngroups, this_group
-      real*8, intent(in) :: n_in_group(:)
-      character*1, intent(in) :: mode
-    end subroutine
-  end interface
-!*********************************************
 
   pi = dacos(-1.d0)
 
@@ -329,22 +303,6 @@ subroutine HS_res(nsupergroups, ngroups_in_supergroup, s0, T, M, N_DoF, V, V_par
   integer :: i, j
   real*8, allocatable :: D(:), D0(:), z_i(:), xi_i(:), omega(:)
 
-  interface
-    subroutine get_compressibility(nsupergroups, ngroups_in_supergroup, V, sigma, f, xi, z)
-      integer, intent(in) :: nsupergroups
-      real*8, intent(in) :: V, sigma(:), f(:), ngroups_in_supergroup(:)
-      real*8, intent(out) :: z, xi
-    end subroutine
-
-    subroutine get_omega(this_group, ngroups, n_in_group, volume_group, sigma_group, mass_group, mode, omega)
-      real*8, intent(out) :: omega
-      real*8, intent(in) :: volume_group(:), sigma_group(:), mass_group(:)
-      integer, intent(in) :: ngroups, this_group
-      real*8, intent(in) :: n_in_group(:)
-      character*1, intent(in) :: mode
-    end subroutine
-  end interface
-
   pi = dacos(-1.d0)
 
   allocate( D(1:nsupergroups) )
@@ -566,3 +524,5 @@ subroutine get_real_rotational_diffusivity(tau, n, N_DoF, ngroups, group_in_supe
  D = tau / (2.d0 * dfloat(n)**2 * N_DoF) * D
 
 end subroutine
+
+end module

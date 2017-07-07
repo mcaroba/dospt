@@ -1,3 +1,44 @@
+module trajectory
+
+use read_input
+
+implicit none
+
+  real*4, allocatable :: velocities(:,:,:), positions(:,:,:), volumes(:,:)
+  real*8, allocatable :: m(:), volumes_temp(:)
+  integer :: n_volumes, di_volumes
+  character*16, allocatable :: species(:)
+
+
+
+contains
+
+
+!=================================================================================================
+!=================================================================================================
+subroutine allocate_trajectory_arrays()
+!******************************************************
+! Allocate arrays for trajectory input
+  allocate( velocities(1:natoms, 1:3, 1:n) )
+  allocate( positions(1:natoms, 1:3, 1:n) )
+  allocate( m(1:natoms) )
+  allocate( species(1:natoms) )
+! FIX THIS: di_volumes SHOULD BE AVAILABLE TO THE USER AS AN INPUT VARIABLE
+! Only calculate Voronoi cell volumes every 100 time steps
+  di_volumes = 100
+  n_volumes = 1 + (n - 1)/di_volumes
+  allocate( volumes(1:natoms, 1:n_volumes) )
+  allocate( volumes_temp(1:natoms) )
+!******************************************************
+end subroutine
+!=================================================================================================
+!=================================================================================================
+
+
+
+
+
+
 !=================================================================================================
 !=================================================================================================
 subroutine read_trajectory(n, natoms, tau, L, mode, positions, velocities, estimate_vel, error, &
@@ -33,17 +74,16 @@ subroutine read_trajectory(n, natoms, tau, L, mode, positions, velocities, estim
 
 !******************************************************
 ! The get_mass subroutine requires an interface
-interface
-subroutine get_mass(mass_label, mass, nmasses, mass_types, mass_types_values)
-  integer, intent(in) :: nmasses
-  character*16, intent(in) :: mass_label
-  real*8, intent(out) :: mass
-  real*8, intent(in)  :: mass_types_values(:)
-  character*16, intent(in)  :: mass_types(:)
-end subroutine
-end interface
+!interface
+!subroutine get_mass(mass_label, mass, nmasses, mass_types, mass_types_values)
+!  integer, intent(in) :: nmasses
+!  character*16, intent(in) :: mass_label
+!  real*8, intent(out) :: mass
+!  real*8, intent(in)  :: mass_types_values(:)
+!  character*16, intent(in)  :: mass_types(:)
+!end subroutine
+!end interface
 !******************************************************
-
 
   allocate( x(1:natoms) )
   allocate( y(1:natoms) )
@@ -65,7 +105,8 @@ end interface
   write(*,'(A,1X,A,1X,A)')' Reading', filename, 'file...               |'
   if(iostatus/=0)then
     close(10)
-    write(*,'(A,1X,A,1X,A)')' ERROR:', filename, 'file could not be found|'
+    write(*,*)'                                       |'
+    write(*,'(A,1X,A,1X,A)')' ERROR:', filename, 'file could not be found|  <-- ERROR'
     write(*,*)'                                       |'
     write(*,*)'.......................................|'
     error = .true.
@@ -384,3 +425,38 @@ subroutine estimate_v_quartic(r1, r2, r3, r4, r5, dt, k, v0)
 end subroutine
 !=================================================================================================
 !=================================================================================================
+
+
+
+
+
+
+
+
+!=================================================================================================
+!=================================================================================================
+subroutine get_mass(mass_label, mass, nmasses, mass_types, mass_types_values)
+
+  implicit none
+
+  integer :: nmasses, i
+  character*16 :: mass_label
+  real*8 :: mass
+  real*8 :: mass_types_values(:)
+  character*16 :: mass_types(:)
+
+  do i=1,nmasses
+    if(trim(mass_label) == trim(mass_types(i)))then
+      mass = mass_types_values(i)
+      return
+    end if
+  end do
+
+  write(*,*) 'ERROR: Mass for atom ', trim(mass_label), ' not found in the "masses" file!'
+
+end subroutine
+!=================================================================================================
+!=================================================================================================
+
+
+end module

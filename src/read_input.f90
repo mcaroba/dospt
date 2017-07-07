@@ -20,7 +20,7 @@ module read_input
   logical :: smooth = .false., estimate_vel = .false., renormalize = .false., vibrational_gas = .false.
   logical :: f_opt = .true., f_rot_opt = .true., write_dos = .true.
   character*3 :: smixture = "mol", hs_formalism
-  integer :: natoms, n = 0, iostatus, execution_error, nrebuild_top = 1
+  integer :: natoms, n = 0, iostatus, execution_error = 0, nrebuild_top = 1
 
 ! Variables for grouping interface
   integer :: ngroups, nmasses
@@ -74,7 +74,7 @@ module read_input
   write(*,*)'                          ...                               |'
   write(*,*)'                    mcaroba@gmail.com                       |'
   write(*,*)'                          ...                               |'
-  write(*,*)'                 Last updated Feb 2017                      |'
+  write(*,*)'                 Last updated Jul 2017                      |'
   write(*,*)'                                                            |'
   write(*,*)'....................................... ____________________/'
 
@@ -92,7 +92,7 @@ module read_input
   write(*,*)'Checking input file...                 |'
   if(iostatus/=0)then
     close(10)
-    write(*,*)'ERROR: input file could not be found   |'
+    write(*,*)'ERROR: input file could not be found   |  <-- ERROR'
     write(*,*)'                                       |'
     write(*,*)'.......................................|'
     execution_error = 98
@@ -105,7 +105,7 @@ module read_input
         exit
       end if
       keyword_first=keyword
-      if(keyword_first=='#')then
+      if(keyword_first=='#' .or. keyword_first=='!')then
         continue
       else if(keyword=='points')then
         backspace(10)
@@ -164,19 +164,28 @@ module read_input
           f_opt = .true.
         else
           iostatus=1
-          write(*,*)'ERROR - invalid value for keyword: ', keyword
         end if
       else
         iostatus=1
-        write(*,*)'ERROR - invalid keyword: ', keyword
+        write(*,*)'                                       |'
+        write(*,*)'ERROR - invalid keyword:               |  <-- ERROR'
+          write(*,'(1X,A,A36,A)') '*) ', keyword, '|'
+        write(*,*)'                                       |'
       end if
-    if(iostatus/=0)then
-      write(*,*)'ERROR: bad input file                  |'
-      write(*,*)'                                       |'
-      write(*,*)'.......................................|'
-      execution_error = 98
-      return
-    end if
+!     If the values does not match the expected type, raise an error:
+      if(iostatus > 0)then
+        write(*,*)'                                       |'
+        write(*,*)'ERROR - invalid value for keyword:     |  <-- ERROR'
+        write(*,'(1X,A,A36,A)') '*) ', keyword, '|'
+        write(*,*)'                                       |'
+      end if
+      if(iostatus /= 0)then
+        write(*,*)'ERROR: bad input file                  |  <-- ERROR'
+        write(*,*)'                                       |'
+        write(*,*)'.......................................|'
+        execution_error = 98
+        return
+      end if
     end do
   end if
   close(10)
@@ -202,16 +211,16 @@ module read_input
 ! The different input files (other than input) must be read in this order
 
 ! Read the masses file
-call read_masses()
+  call read_masses()
 
 ! Read the groups file
-call read_groups()
+  call read_groups()
 
 ! Read the supergroups file
-call read_supergroups()
+  call read_supergroups()
 
 ! Read the topology file
-call read_topology()
+  call read_topology()
 end subroutine
 
 
