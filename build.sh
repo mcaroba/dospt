@@ -6,7 +6,7 @@ cd src
 # This compiles dfftpack
 #
 cd dfftpack
-make
+#make
 cd ../
 #
 ########################################################################
@@ -17,8 +17,8 @@ cd ../
 # This compiles and locally installs Voro++
 #
 cd voro++/voro++-0.4.6
-make
-make install
+#make
+#make install
 cd ../../
 #
 ########################################################################

@@ -5,7 +5,7 @@ A minimal requirement to install DoSPT is access to a Fortran compiler and
 a C++ compiler. "gfortran" and "g++" have been tested to work reliably. If
 you are using those compilers and still experince any problems it could be
 down to a version issue. Compilation was successfully carried out with
-at least gfortran 4.8.4 and g++ 4.8.4 on Ubuntu 14.04.
+at least gfortran 5.4.0 and g++ 5.4.0 on Ubuntu 16.04.
 *****************************************************************************
 
 

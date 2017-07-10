@@ -12,7 +12,7 @@ program DOSPT
 !    .MMM . MMMM=..MMM ..MMM7 ..  ..8MMM..MMM ...........MMM.....    !
 !    MMMMMMMMMM. .. MMMMMMM   MMMMMMMMD...MMM ..........MMM=....     !
 !                                                                    !
-!                          DoSPT v0.1.1                              !
+!                           DoSPT v0.2                               !
 !                                                                    !
 !  The following distribution of Fortran routines for thermodynamic  !
 !      properties calculation, collectively known as DoSPT, has      !
@@ -46,7 +46,7 @@ program DOSPT
 !                     of Lennard-Jones fluids"                       !
 !                 J. Chem. Phys. 119, 11792 (2003)                   !
 !                                                                    !
-!!!          Distribution last updated on  7 July 2016             !!!
+!!!          Distribution last updated on 10 July 2017             !!!
 !!!!!                                                            !!!!!
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -94,8 +94,8 @@ program DOSPT
 
 !=================================================================================================
 !=================================================================================================
-! This is the program workflow. Ideally (i.e., at some point) all the operations performed by the code will be put here
-! and will appear as a sequential call to subroutines contained in different modules.
+! This is the program workflow. All the operations performed by the code are put here
+! and appear as a sequential call to subroutines contained in different modules.
 
 
 
@@ -124,7 +124,7 @@ program DOSPT
 
 !******************************************************
 ! Read trajectory file (read_trajectory.f90)
-  if(execution_error /= 98)then
+  if(execution_error == 0)then
     call allocate_trajectory_arrays()
     call read_trajectory(n, natoms, tau, L, mode, positions, velocities, estimate_vel, error, &
                          m, nmasses, mass_types, mass_types_values, volumes, volumes_temp, species, di_volumes)
