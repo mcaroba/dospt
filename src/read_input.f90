@@ -20,7 +20,7 @@ module read_input
   logical :: smooth = .false., estimate_vel = .false., renormalize = .false., vibrational_gas = .false.
   logical :: f_opt = .true., f_rot_opt = .true., write_dos = .true.
   character*3 :: smixture = "mol", hs_formalism
-  integer :: natoms, n = 0, iostatus, execution_error = 0, nrebuild_top = 1
+  integer :: natoms, n = 0, iostatus, execution_error = 0, nrebuild_top = 1, n_beg = 1, stride = 1
 
 ! Variables for grouping interface
   integer :: ngroups, nmasses
@@ -110,6 +110,12 @@ module read_input
       else if(keyword=='points')then
         backspace(10)
         read(10,*,iostat=iostatus) crap, crap, n
+      else if(keyword=='begin')then
+        backspace(10)
+        read(10,*,iostat=iostatus) crap, crap, n_beg
+      else if(keyword=='stride')then
+        backspace(10)
+        read(10,*,iostat=iostatus) crap, crap, stride
       else if(keyword=='cell')then
         backspace(10)
         read(10,*,iostat=iostatus) crap, crap, L(1), L(2), L(3)
@@ -192,6 +198,8 @@ module read_input
   write(*,*)'                                       |'
   write(*,'(1X,A)')'You specified the following options:   |'
   write(*,*)'                                       |'
+! Recalculate number of points given the stride provided
+  n = n / stride
   write(*,'(1X,A,I15,A)')'No. of snapshots = ', n, '     |'
   write(*,'(1X,A,F14.3,A)')'Trajectory period = ', tau, ' ps  |'
   write(*,'(1X,A,F7.3,A,F7.3,A,F7.3,A)')'Cell = [', L(1), ', ',  L(2), ', ', L(3), '] nm  |'

@@ -465,7 +465,12 @@ subroutine get_dos()
 ! FIX THIS. MAKE IT POSSIBLE FOR THE USER TO CHANGE MAX CUTOFF FOR DoS OUTPUT
 ! Choose upper cutoff for DoS printing
   if( .true. )then
+!   This corresponds to a 150 ps^-1 cutoff for output frequency
     imax = int(150.d0 * tau) - 1
+!   imax can't be larger than the array size
+    if( imax > (n+1)/2 )then
+      imax = (n+1)/2
+    end if
   else
     imax = (n+1)/2
   end if

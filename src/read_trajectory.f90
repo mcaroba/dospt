@@ -122,7 +122,8 @@ subroutine read_trajectory(n, natoms, tau, L, mode, positions, velocities, estim
   k = 1
   j2 = 1
 !
-  do i=1,n
+  do i2 = 1, n_beg - 1 + n*stride
+    i = (i2 - n_beg) / stride + 1
 !   Update progress bar every n/36 iterations
     if(dfloat(i) > dfloat(k)*update_bar)then
       write(*,'(A)', advance='no')'='
@@ -132,76 +133,95 @@ subroutine read_trajectory(n, natoms, tau, L, mode, positions, velocities, estim
 !   xyz format
 !   No input velocities, positions given in A, then converted to nm
     if(mode == "xyz")then
-      read(10,*)
-      read(10,*)
-      do j=1,natoms
-        read(10,*) mass_label, positions(j,1,i), positions(j,2,i), positions(j,3,i)
-        if(i == 1)then
-          species(j) = mass_label
-          call get_mass(mass_label, m(j), nmasses, mass_types, mass_types_values)
-        end if
-        positions(j,1:3,i) = 0.1 * positions(j,1:3,i)
-        x(j) = positions(j,1,i)
-        y(j) = positions(j,2,i)
-        z(j) = positions(j,3,i)
-      end do
+      if( i > 0 .and. mod(i2-n_beg,stride) == 0 )then
+        read(10,*)
+        read(10,*)
+        do j=1,natoms
+          read(10,*) mass_label, positions(j,1,i), positions(j,2,i), positions(j,3,i)
+          if(i == 1)then
+            species(j) = mass_label
+            call get_mass(mass_label, m(j), nmasses, mass_types, mass_types_values)
+          end if
+          positions(j,1:3,i) = 0.1 * positions(j,1:3,i)
+          x(j) = positions(j,1,i)
+          y(j) = positions(j,2,i)
+          z(j) = positions(j,3,i)
+        end do
+      else
+        read(10,*)
+        read(10,*)
+        do j=1,natoms
+          read(10,*)
+        end do
+      end if
 !
 !   gromacs format
 !   Input velocities posssible. Positions in nm and velocities in nm/ps
     else if(mode == "gro")then
-      read(10,*)
-      read(10,*)
-!     Prevent missing spaces between numbers from raising a runtime reading error by
-!     learning the precision of Gromacs output. The usual Gromacs format is (i5,2a5,i5,3f8.3,3f8.4)
-!     However, the user can define more decimal places for positions and velocities, e.g.
-!     for DoSPT it should be at least 5 decimals for positions and 5+1 for velocities (velocities
-!     are written by Gromacs always with an extra decimal). Here we figure out how many decimal places
-!     are being used so that we can generate the correct format for read(,). All of this is necessary
-!     bacause sometimes Gromacs' format does not leave a space between e.g. two velocities.
-      if(i == 1)then
-        read(10,*) crap, crap, crap, crap
-        k2 = len_trim(crap)
-        crap = trim(crap)
-        j3 = 0
-        do j = 1, k2
-          j3 = j3 + 1
-          if(crap(j:j) == ".")then
-            ndec = k2 - j3
-            exit
-          end if
-        end do
-        backspace(10)
-        write(format_gromacs1, '(A,I2,A,I2,A,I2,A,I2,A)') '(I5,2A5,I5,3F', 5+ndec, '.', ndec, ',3F', 5+ndec, '.', 1+ndec, ')'
-        write(format_gromacs2, '(A,I2,A,I2,A)') '(I5,2A5,I5,3F', 5+ndec, '.', ndec, ')'
-        format_gromacs1 = trim(format_gromacs1)
-      end if
-      do j=1,natoms
-        if(estimate_vel)then
-          read(10, format_gromacs2) k2, crap, crap, k2, positions(j,1:3,i)
-        else
-          read(10, format_gromacs1) k2, crap, crap, k2, positions(j,1:3,i), velocities(j,1:3,i)
-        end if
+      if( i > 0 .and. mod(i2-n_beg,stride) == 0 )then
+        read(10,*)
+        read(10,*)
+!       Prevent missing spaces between numbers from raising a runtime reading error by
+!       learning the precision of Gromacs output. The usual Gromacs format is (i5,2a5,i5,3f8.3,3f8.4)
+!       However, the user can define more decimal places for positions and velocities, e.g.
+!       for DoSPT it should be at least 5 decimals for positions and 5+1 for velocities (velocities
+!       are written by Gromacs always with an extra decimal). Here we figure out how many decimal places
+!       are being used so that we can generate the correct format for read(,). All of this is necessary
+!       because sometimes Gromacs' format does not leave a space between e.g. two velocities.
         if(i == 1)then
-          read(crap,*) mass_label
-          species(j) = mass_label
-          call get_mass(mass_label, m(j), nmasses, mass_types, mass_types_values)
+          read(10,*) crap, crap, crap, crap
+          k2 = len_trim(crap)
+          crap = trim(crap)
+          j3 = 0
+          do j = 1, k2
+            j3 = j3 + 1
+            if(crap(j:j) == ".")then
+              ndec = k2 - j3
+              exit
+            end if
+          end do
+          backspace(10)
+          write(format_gromacs1, '(A,I2,A,I2,A,I2,A,I2,A)') '(I5,2A5,I5,3F', 5+ndec, '.', ndec, ',3F', 5+ndec, '.', 1+ndec, ')'
+          write(format_gromacs2, '(A,I2,A,I2,A)') '(I5,2A5,I5,3F', 5+ndec, '.', ndec, ')'
+          format_gromacs1 = trim(format_gromacs1)
         end if
-        x(j) = positions(j,1,i)
-        y(j) = positions(j,2,i)
-        z(j) = positions(j,3,i)
-      end do
-      read(10,*)
+        do j=1,natoms
+          if(estimate_vel)then
+          read(10, format_gromacs2) k2, crap, crap, k2, positions(j,1:3,i)
+          else
+            read(10, format_gromacs1) k2, crap, crap, k2, positions(j,1:3,i), velocities(j,1:3,i)
+          end if
+          if(i == 1)then
+            read(crap,*) mass_label
+            species(j) = mass_label
+            call get_mass(mass_label, m(j), nmasses, mass_types, mass_types_values)
+          end if
+          x(j) = positions(j,1,i)
+          y(j) = positions(j,2,i)
+          z(j) = positions(j,3,i)
+        end do
+        read(10,*)
+      else
+        read(10,*)
+        read(10,*)
+        do j=1,natoms
+          read(10,*)
+        end do
+        read(10,*)
+      end if
     end if
 !
 !   Get Voronoi cell volumes every di_volumes time steps
-    if( i == 1 )then
-      call voronoi_volumes(natoms, L, x, y, z, volumes_temp)
-      volumes(1:natoms,j2) = volumes_temp(1:natoms)
-      j2 = j2 + 1
-    else if( mod(i,di_volumes) == 1 )then
-      call voronoi_volumes(natoms, L, x, y, z, volumes_temp)
-      volumes(1:natoms,j2) = volumes_temp(1:natoms)
-      j2 = j2 + 1
+    if( i > 0 .and. mod(i2-n_beg,stride) == 0 )then
+      if( i == 1 )then
+        call voronoi_volumes(natoms, L, x, y, z, volumes_temp)
+        volumes(1:natoms,j2) = volumes_temp(1:natoms)
+        j2 = j2 + 1
+      else if( mod(i,di_volumes) == 1 )then
+        call voronoi_volumes(natoms, L, x, y, z, volumes_temp)
+        volumes(1:natoms,j2) = volumes_temp(1:natoms)
+        j2 = j2 + 1
+      end if
     end if
   end do
   close(10)
