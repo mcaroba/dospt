@@ -459,7 +459,7 @@ subroutine get_dos()
     write(*,*)'The average principal moments of       |'
     write(*,*)'inertia (in amu*nm^2) are:             |'
     write(*,*)'                                       |'
-    write(*,*)'Supgrp        I_x        I_y        I_z|'
+    write(*,*)'Supgrp        I_1        I_2        I_3|'
     write(*,*)'------ ---------- ---------- ----------|'
     do j = 1, nsupergroups
       write(*,'(1X,I6,1X,F10.4,1X,F10.4,1X,F10.4,A1)') j, eig_supergroup(j,1:3), '|'
