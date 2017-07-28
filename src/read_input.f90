@@ -18,7 +18,7 @@ module read_input
   character :: crap
   real*8 :: L(1:3) = 0., V = 0., tau = 0., T = 1.d-10, twobykT, sigma_nu = 0.d0
   logical :: smooth = .false., estimate_vel = .false., renormalize = .false., vibrational_gas = .false.
-  logical :: f_opt = .true., f_rot_opt = .true., write_dos = .true.
+  logical :: f_opt = .true., f_rot_opt = .true., write_dos = .true., print_mi = .false.
   character*3 :: smixture = "mol", hs_formalism
   integer :: natoms, n = 0, iostatus, execution_error = 0, nrebuild_top = 1, n_beg = 1, stride = 1
 
@@ -158,6 +158,9 @@ module read_input
       else if(keyword=='nrebuild_top')then
         backspace(10)
         read(10,*,iostat=iostatus) crap, crap, nrebuild_top
+      else if(keyword=='print_mi')then
+        backspace(10)
+        read(10,*,iostat=iostatus) crap, crap, print_mi
       else if(keyword=='hs_formalism')then
 !       Define the HS formalism, overriding f_opt and f_rot_opt flags
         backspace(10)
