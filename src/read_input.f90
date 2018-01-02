@@ -47,6 +47,11 @@ module read_input
   real*8, allocatable :: symmetry_number_of_topology(:)
   character*16, allocatable :: species_in_topology(:,:)
 
+! Volume exclusion
+  character*1024 :: exclude_volume_string
+  logical :: exclude_volume_logical = .false.
+  logical, allocatable :: exclude_volume(:)
+
   contains
 
   subroutine print_welcome_and_read_input()
@@ -67,14 +72,14 @@ module read_input
   write(*,*)'                                                            |'
   write(*,*)'                    You are using the                       |'
   write(*,*)'    Density of States (two-) Phase Thermodynamics, v0.2     |'
-  write(*,*)'                    DoSPT v0.2-alpha                        |'
+  write(*,*)'                   DoSPT v0.2.1-alpha                       |'
   write(*,*)'                    http://dospt.org                        |'
   write(*,*)'                          ...                               |'
   write(*,*)'                Written by Miguel A. Caro                   |'
   write(*,*)'                          ...                               |'
   write(*,*)'                    mcaroba@gmail.com                       |'
   write(*,*)'                          ...                               |'
-  write(*,*)'                 Last updated Jul 2017                      |'
+  write(*,*)'                 Last updated Dec 2017                      |'
   write(*,*)'                                                            |'
   write(*,*)'....................................... ____________________/'
 
@@ -161,6 +166,14 @@ module read_input
       else if(keyword=='print_mi')then
         backspace(10)
         read(10,*,iostat=iostatus) crap, crap, print_mi
+      else if(keyword=='exclude_volume')then
+        exclude_volume_logical = .true.
+        backspace(10)
+        crap = ""
+        do while( crap /= "=" )
+          read(10,'(A1)',advance="no",iostat=iostatus) crap
+        end do
+        read(10,'(1X,A1024)',iostat=iostatus) exclude_volume_string
       else if(keyword=='hs_formalism')then
 !       Define the HS formalism, overriding f_opt and f_rot_opt flags
         backspace(10)
@@ -232,6 +245,7 @@ module read_input
 
 ! Read the topology file
   call read_topology()
+
 end subroutine
 
 

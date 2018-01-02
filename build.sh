@@ -74,9 +74,9 @@ flags="-fopenmp -std=legacy"
 main="DoSPT.f90"
 subroutines="misc.f90 volume.f90 sort_supergroups.f90"
 src="$main $subroutines"
-modules="constants.f90 read_input.f90 good_bye.f90 read_trajectory.f90 \
-         rebuild_topology.f90 calc_dos.f90 misc2.f90 partition.f90 \
-         fluidicity.f90 thermodynamic.f90"
+modules="misc2.f90 constants.f90 read_input.f90 good_bye.f90 read_trajectory.f90 \
+         rebuild_topology.f90 fluidicity.f90 \
+         calc_dos.f90 partition.f90 thermodynamic.f90"
 #debug="-g -fcheck=all -Wall"
 #debug="-g -fcheck=all"
 #

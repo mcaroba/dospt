@@ -36,6 +36,10 @@ module calc_dos
   real*4, allocatable :: smooth_x(:), smooth_y(:), smooth_ys(:), smooth_rw(:), smooth_res(:)
   real*4 :: smooth_f
 
+! Volume exclusion
+  real*8, allocatable :: V_apparent(:)
+  real*8, allocatable :: N_apparent(:)
+
 
   contains
 
@@ -444,6 +448,30 @@ subroutine get_dos()
 !     consistency in case the groups are not equivalent (for some reason)
       mass_supergroup(j) = mass_supergroup(j) / ngroups_in_supergroup_eff(j)
     end do
+!   If volume exclusion is enabled, we handle it here
+    allocate( V_apparent(1:nsupergroups) )
+    allocate( N_apparent(1:nsupergroups) )
+    V_apparent = V
+    N_apparent = ngroups_eff
+    allocate( exclude_volume(1:nsupergroups) )
+    exclude_volume = .false.
+    if( exclude_volume_logical )then
+      call exclude_volume_assign()
+      do j = 1, nsupergroups
+        if( exclude_volume(j) )then
+          V_apparent = V_apparent - volume_supergroup(j)
+          N_apparent = N_apparent - ngroups_in_supergroup_eff(j)
+        end if
+      end do
+      do j = 1, nsupergroups
+        if( exclude_volume(j) )then
+          V_apparent(j) = volume_supergroup(j)
+          N_apparent(j) = ngroups_in_supergroup_eff(j)
+        end if
+      end do
+    end if
+!   End of volume exclusion block
+!
   end if
   if(update_bar > 0.9999d0)then
     write(*,'(A4)')'=] |'
@@ -774,6 +802,58 @@ subroutine get_decomposed_velocities(m, r, v, natoms_in_group, v_rot, v_cm, v_vi
 end subroutine
 !=================================================================================================
 !=================================================================================================
+
+
+
+
+
+
+
+
+
+
+!=================================================================================================
+!=================================================================================================
+subroutine exclude_volume_assign()
+
+  integer :: group_start, group_end
+  character*1 :: sg_char
+  character*32 :: sg_string
+
+  sg_string = ""
+  group_start = 0
+  do i = 1, len(exclude_volume_string)
+    read(exclude_volume_string(i:i), '(A)', iostat=iostatus) sg_char
+    if(sg_char == "-")then
+      read(sg_string,*) group_start
+      sg_string = ""
+    else if( sg_char == " " .and. sg_string == "" )then
+      continue
+    else if(sg_char == "," .or. sg_char == " " .or. iostatus < 0)then
+      read(sg_string,*) group_end
+      if( group_start == 0 )then
+        group_start = group_end
+      end if
+      do j=group_start,group_end
+        exclude_volume(j) = .true.
+      end do
+      sg_string = ""
+      group_start = 0
+    else
+      write(sg_string,*) trim(sg_string) // sg_char
+    end if
+    if( iostatus /= 0 )then
+      exit
+    end if
+  end do
+end subroutine
+!=================================================================================================
+!=================================================================================================
+
+
+
+
+
 
 
 end module

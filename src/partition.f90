@@ -71,7 +71,8 @@ subroutine dof_partition()
 !       For a monocomponent system, the results should be identical.
 !       Available for testing and debugging purposes.
 !       Calculate Delta:
-        call get_omega(j, ngroups, dfloat(1+0*natoms_in_group), volume_group, sigma_group(1:ngroups,k), mass_group, "v", omega)
+        call get_omega(j, ngroups, dfloat(1+0*natoms_in_group), volume_group, sigma_group(1:ngroups,k), mass_group, "v", omega, &
+                       (/ .false. /))
         call get_delta(conv1 * twobykT * Sgroup(j,1,k), T, conv2, 1.d0, &
                        degf_group(j,k), mass_group(j), V, delta_group(j,k), omega)
 !       And f:
@@ -92,11 +93,12 @@ subroutine dof_partition()
     do k = 1, 3
       call fluidicity_calculator(ngroups, dfloat(1+0*natoms_in_group), degf_group(1:ngroups,k), &
                                  conv1 * twobykT * Sgroup(1:ngroups,1,k), &
-                                 mass_group, T, V, volume_group, niter, res, sigma_group(1:ngroups,k), f_group(1:ngroups,k))
+                                 mass_group, T, (/ V /), volume_group, niter, res, &
+                                 sigma_group(1:ngroups,k), f_group(1:ngroups,k), (/ .false. /))
       do j = 1, ngroups
 !       Get partial compressibility and partial packing fraction
-        call get_compressibility(1, dfloat(1+0*natoms_in_group(j:j)), volume_group(j), sigma_group(j:j, k), &
-                                 f_group(j:j, k), y_group(j,k), z_group(j,k))
+        call get_compressibility(1, dfloat(1+0*natoms_in_group(j:j)), volume_group(j:J), sigma_group(j:j, k), &
+                                 f_group(j:j, k), y_group(j,k), z_group(j,k), (/ .false. /))
       end do
     end do
   end if
@@ -125,7 +127,10 @@ subroutine dof_partition()
           degf_supergroup(j,k) = degf_supergroup(j,k) + conv1 * twobykT * Ssupergroup(j,i,k) / tau
         end do
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        if((k == 1 .and. .not. f_opt) .or. (k == 2 .and. .not. f_rot_opt) .or. (k == 3))then
+        if( (k == 1 .and. .not. f_opt) .or. &
+            (k == 1 .and. exclude_volume(j)) .or. &
+            (k == 2 .and. .not. f_rot_opt) .or. &
+            (k == 3))then
 !         This menthod of calculating the fluidicity is essentially equivalent to Lin's method,
 !         except for the inclusion of the "omega term" heuristically in the definition of the
 !         normalized diffusivity "delta". This method is now deprecated and the more sophisticated
@@ -135,13 +140,14 @@ subroutine dof_partition()
 !         Vibrational fluidicity is not a well-defined concept and is calculated only for curious
 !         purposes using this method. Vibrational fluidicity is not used to calculate vibrational entropy.
 !         Calculate Delta:
-          if(hs_formalism == "lin")then
+          if(hs_formalism == "lin" .or. exclude_volume(j))then
             omega = 1
             temp(1) = volume_supergroup(j)
           else
             call get_omega(j, nsupergroups, ngroups_in_supergroup_eff, volume_supergroup, &
-                           sigma_supergroup(1:nsupergroups,k), mass_supergroup, "v", omega)
-            temp(1) = V
+                           sigma_supergroup(1:nsupergroups,k), mass_supergroup, "v", omega, exclude_volume)
+!            temp(1) = V
+            temp(1) = V_apparent(j)
           end if
           call get_delta(conv1 * twobykT * Ssupergroup(j,1,k), T, conv2, ngroups_in_supergroup_eff(j), &
                          degf_supergroup(j,k), mass_supergroup(j), temp(1), delta_supergroup(j,k), omega)
@@ -162,13 +168,16 @@ subroutine dof_partition()
 !     Translational part
       k = 1
       call fluidicity_calculator(nsupergroups, ngroups_in_supergroup_eff, degf_supergroup(1:nsupergroups,k), &
-                                 conv1 * twobykT * Ssupergroup(1:nsupergroups,1,k), mass_supergroup, T, V, &
+                                 conv1 * twobykT * Ssupergroup(1:nsupergroups,1,k), mass_supergroup, T, V_apparent, &
                                  volume_supergroup, niter, res, sigma_supergroup(1:nsupergroups,k), &
-                                 f_supergroup(1:nsupergroups,k))
+                                 f_supergroup(1:nsupergroups,k), exclude_volume)
       do j = 1, nsupergroups
 !       Get partial compressibility and partial packing fraction
-        call get_compressibility(1, ngroups_in_supergroup_eff(j:j), volume_supergroup(j), sigma_supergroup(j:j, k), &
-                                 f_supergroup(j:j, k), y_supergroup(j,k), z_supergroup(j,k))
+!       This should not be used for excluded volumes -> use Lin's formalism instead
+        if( .not. exclude_volume(j) )then
+          call get_compressibility(1, ngroups_in_supergroup_eff(j:j), volume_supergroup(j:j), sigma_supergroup(j:j, k), &
+                                   f_supergroup(j:j, k), y_supergroup(j,k), z_supergroup(j,k), exclude_volume(j:j))
+        end if
       end do
     end if
     if(f_rot_opt)then
@@ -183,9 +192,11 @@ subroutine dof_partition()
 !        call get_diffusivity(Ssupergroup(j,1,k), T, mass_supergroup(j), degf_supergroup(j,k), D_rot_real)
 !       Ideal translational diffusion coefficient -> D_ideal
         call get_omega(j, nsupergroups, ngroups_in_supergroup_eff, volume_supergroup, &
-                       sigma_supergroup(1:nsupergroups, k), mass_supergroup, "v", omega)
+                       sigma_supergroup(1:nsupergroups, k), mass_supergroup, "v", omega, exclude_volume)
+!        temp(1) = V
+        temp(1) = V_apparent(j)
         call get_zero_pressure_diffusivity(sigma_supergroup(j,k), omega, T, mass_supergroup(j), &
-                                           ngroups_in_supergroup_eff(j), V, D_ideal)
+                                           ngroups_in_supergroup_eff(j), temp(1), D_ideal)
 !       Ideal rotational diffusion coefficient -> D_rot_ideal
         call get_ideal_rotational_diffusivity(sigma_supergroup(j,k), T, mass_supergroup(j), &
                                               ngroups_in_supergroup_eff(j), volume_supergroup(j), D_ideal, D_rot_ideal)

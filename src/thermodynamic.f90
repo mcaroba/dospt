@@ -301,9 +301,11 @@ temp(1) = volume_supergroup(j)
       end do
       ! Entropy of mixture
       if( smixture == "vol")then
-        temp(1) = kB * ngroups_in_supergroup_eff(j) * dlog(V / volume_supergroup(j))
+!        temp(1) = kB * ngroups_in_supergroup_eff(j) * dlog(V / volume_supergroup(j))
+        temp(1) = kB * ngroups_in_supergroup_eff(j) * dlog(V_apparent(j) / volume_supergroup(j))
       else if( smixture == "mol")then
-        temp(1) = kB * ngroups_in_supergroup_eff(j) * dlog(ngroups_eff / ngroups_in_supergroup_eff(j))
+!        temp(1) = kB * ngroups_in_supergroup_eff(j) * dlog(ngroups_eff / ngroups_in_supergroup_eff(j))
+        temp(1) = kB * ngroups_in_supergroup_eff(j) * dlog(N_apparent(j) / ngroups_in_supergroup_eff(j))
 !     This entropy of mixing should only be used for binary mixtures !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! UNTESTED!!!!!
       else if( nsupergroups == 2 .and. smixture == "bin")then
         v_dash = volume_supergroup(2) / volume_supergroup(1) * ngroups_in_supergroup_eff(1) / ngroups_in_supergroup_eff(2)
