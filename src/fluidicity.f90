@@ -211,22 +211,26 @@ subroutine get_omega(this_group, ngroups, natoms_in_group, volume_group, sigma_g
 
   omega = 0.d0
 
-  if( mode == "v" )then
-    do j=1, ngroups
-      if( .not. exclude_volume(j) )then
-        omega = omega + 1.d0/4.d0/dsqrt(2.d0) * natoms_in_group(j) / natoms_in_group(this_group) * &
-                (1.d0 + (volume_group(j)/volume_group(this_group))**(1.d0/3.d0))**2.d0 * &
-                dsqrt(1.d0 + mass_group(this_group)/mass_group(j))
-      end if
-    end do
-  else if( mode == "s" )then
-    do j=1, ngroups
-      if( .not. exclude_volume(j) )then
-        omega = omega + 1.d0/4.d0/dsqrt(2.d0) * natoms_in_group(j) / natoms_in_group(this_group) * &
-                (1.d0 + sigma_group(j)/sigma_group(this_group))**2.d0 * &
-                dsqrt(1.d0 + mass_group(this_group)/mass_group(j))
-      end if
-    end do
+  if( .not. exclude_volume(this_group) )then
+    if( mode == "v" )then
+      do j=1, ngroups
+        if( .not. exclude_volume(j) )then
+          omega = omega + 1.d0/4.d0/dsqrt(2.d0) * natoms_in_group(j) / natoms_in_group(this_group) * &
+                  (1.d0 + (volume_group(j)/volume_group(this_group))**(1.d0/3.d0))**2.d0 * &
+                  dsqrt(1.d0 + mass_group(this_group)/mass_group(j))
+        end if
+      end do
+    else if( mode == "s" )then
+      do j=1, ngroups
+        if( .not. exclude_volume(j) )then
+          omega = omega + 1.d0/4.d0/dsqrt(2.d0) * natoms_in_group(j) / natoms_in_group(this_group) * &
+                  (1.d0 + sigma_group(j)/sigma_group(this_group))**2.d0 * &
+                  dsqrt(1.d0 + mass_group(this_group)/mass_group(j))
+        end if
+      end do
+    end if
+  else
+    omega = 1.d0
   end if
 
 end subroutine
