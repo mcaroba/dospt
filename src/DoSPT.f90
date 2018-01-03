@@ -14,13 +14,15 @@ program DOSPT
 !                                                                    !
 !                          DoSPT v0.2.1                              !
 !                                                                    !
+!                        http://dospt.org                            !
+!                                                                    !
 !  The following distribution of Fortran routines for thermodynamic  !
 !      properties calculation, collectively known as DoSPT, has      !
 !                          been written by                           !
 !                                                                    !
 !                           Miguel A. Caro                           !
 !           Dept. of Electrical Engineering and Automation           !
-!       COMP Centre of Excellence in Computational Nanoscience       !
+!                    Department of Applied Physics                   !
 !                 Aalto University, Espoo, Finland                   !
 !                         mcaroba@gmail.com                          !
 !                                                                    !
@@ -46,7 +48,7 @@ program DOSPT
 !                     of Lennard-Jones fluids"                       !
 !                 J. Chem. Phys. 119, 11792 (2003)                   !
 !                                                                    !
-!!!        Distribution last updated on 28 December 2017           !!!
+!!!        Distribution last updated on 03 January 2018            !!!
 !!!!!                                                            !!!!!
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!

@@ -79,7 +79,7 @@ module read_input
   write(*,*)'                          ...                               |'
   write(*,*)'                    mcaroba@gmail.com                       |'
   write(*,*)'                          ...                               |'
-  write(*,*)'                 Last updated Dec 2017                      |'
+  write(*,*)'                 Last updated Jan 2018                      |'
   write(*,*)'                                                            |'
   write(*,*)'....................................... ____________________/'
 
