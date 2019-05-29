@@ -141,7 +141,7 @@ subroutine dof_partition()
 !         purposes using this method. Vibrational fluidicity is not used to calculate vibrational entropy.
 !         Calculate Delta:
           if(hs_formalism == "lin" .or. exclude_volume(j))then
-            omega = 1
+            omega = 1.d0
             temp(1) = volume_supergroup(j)
           else
             call get_omega(j, nsupergroups, ngroups_in_supergroup_eff, volume_supergroup, &

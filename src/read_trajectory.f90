@@ -96,7 +96,7 @@ subroutine read_trajectory(n, natoms, tau, L, mode, positions, velocities, estim
     filename = "traj.gro"
   else if(mode == "xyz")then
     filename = "traj.xyz"
-    estimate_vel = .true.
+!    estimate_vel = .true.
   end if
 
 ! Reads in trajectory file and prints messages
@@ -137,12 +137,19 @@ subroutine read_trajectory(n, natoms, tau, L, mode, positions, velocities, estim
         read(10,*)
         read(10,*)
         do j=1,natoms
-          read(10,*) mass_label, positions(j,1,i), positions(j,2,i), positions(j,3,i)
+          if( estimate_vel )then
+            read(10,*) mass_label, positions(j,1,i), positions(j,2,i), positions(j,3,i)
+          else
+            read(10,*) mass_label, positions(j,1,i), positions(j,2,i), positions(j,3,i), velocities(j,1:3,i)
+          end if
           if(i == 1)then
             species(j) = mass_label
             call get_mass(mass_label, m(j), nmasses, mass_types, mass_types_values)
           end if
-          positions(j,1:3,i) = 0.1 * positions(j,1:3,i)
+!         xyz positions are given in Angstrom and velocities are given in Angstrom/fs. Here we
+!         transform to nm and nm/ps, which are Gromacs units
+          velocities(j,1:3,i) = 100.d0 * velocities(j,1:3,i)
+          positions(j,1:3,i) = 0.1d0 * positions(j,1:3,i)
           x(j) = positions(j,1,i)
           y(j) = positions(j,2,i)
           z(j) = positions(j,3,i)
@@ -187,7 +194,7 @@ subroutine read_trajectory(n, natoms, tau, L, mode, positions, velocities, estim
         end if
         do j=1,natoms
           if(estimate_vel)then
-          read(10, format_gromacs2) k2, crap, crap, k2, positions(j,1:3,i)
+            read(10, format_gromacs2) k2, crap, crap, k2, positions(j,1:3,i)
           else
             read(10, format_gromacs1) k2, crap, crap, k2, positions(j,1:3,i), velocities(j,1:3,i)
           end if

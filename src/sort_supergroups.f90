@@ -49,9 +49,6 @@ subroutine sort_supergroups(ngroups, nsupergroups, ngroups_in_supergroup, group_
   ngroups_in_supergroup = 0
   allocate( group_in_supergroup(1:nsupergroups, 1:ngroups) )
 
-
-  write(*,*) nsupergroups, nlines
-
   do k = 1, nlines
     if( supergroup_in_this_line(k) == 0 )then
 !     This is a comment or blank line
