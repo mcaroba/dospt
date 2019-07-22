@@ -215,7 +215,7 @@ subroutine dof_partition()
     write(10,*) "# Supergroup no.; effective deg. of freedom [CM; rot; vib]; Voronoi volume (nm^3); &
                  &fluidicity f [CM; rot; vib]; HS diameters (nm) [CM, rot, vib]; weight"
     do j=1,nsupergroups
-      write(10,'(I8,2X,F10.4,2X,F10.4,2X,F10.4,2X,F10.4,2X,F6.4,2X,F6.4,2X,F6.4,2X,F10.4,2X,F10.4,2X,F10.4,2X,F12.5)') &
+      write(10,'(I8,2X,F10.4,2X,F10.4,2X,F10.4,2X,F10.4,2X,F7.4,2X,F7.4,2X,F7.4,2X,F10.4,2X,F10.4,2X,F10.4,2X,F12.5)') &
             j, degf_supergroup(j,1:3), volume_supergroup(j), f_supergroup(j,1:3), sigma_supergroup(j,1:3), weight_supergroup(j)
     end do
   end if
