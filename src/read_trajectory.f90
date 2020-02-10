@@ -43,7 +43,7 @@ end subroutine
 !=================================================================================================
 subroutine read_trajectory(n, natoms, tau, L, mode, positions, velocities, estimate_vel, error, &
                            m, nmasses, mass_types, mass_types_values, volumes, volumes_temp, &
-                           species, di_volumes)
+                           species, di_volumes, vacuum, radii_types_values)
 
   implicit none
 
@@ -60,16 +60,24 @@ subroutine read_trajectory(n, natoms, tau, L, mode, positions, velocities, estim
   integer :: k, j2, ndec, k2, j3
   character*1 :: cha
 
-  integer :: nmasses
+  integer :: nmasses, i_vacuum
   character*16 :: mass_label
   real*8 :: m(:)
-  real*8 :: mass_types_values(:)
+  real*8 :: mass_types_values(:), radii_types_values(:)
   character*16 :: mass_types(:), species(:)
 
-  real*8, allocatable :: x(:), y(:), z(:)
+  real*8, allocatable :: x(:), y(:), z(:), radii(:)
 
 ! Quartic approximation can be hard-switched on here - only for testing and debugging
-  logical :: quartic = .false.
+  logical :: quartic = .false., vacuum
+
+
+! There are interoperability issues when passing .true. or .false. from Fortran to C, so we do this:
+  if( vacuum )then
+    i_vacuum = 1
+  else
+    i_vacuum = 0
+  end if
 
 
 !******************************************************
@@ -88,6 +96,8 @@ subroutine read_trajectory(n, natoms, tau, L, mode, positions, velocities, estim
   allocate( x(1:natoms) )
   allocate( y(1:natoms) )
   allocate( z(1:natoms) )
+  allocate( radii(1:natoms) )
+  radii = 0.d0
 
   dt = tau / dfloat(n-1)
 
@@ -145,6 +155,9 @@ subroutine read_trajectory(n, natoms, tau, L, mode, positions, velocities, estim
           if(i == 1)then
             species(j) = mass_label
             call get_mass(mass_label, m(j), nmasses, mass_types, mass_types_values)
+            if( vacuum )then
+              call get_mass(mass_label, radii(j), nmasses, mass_types, radii_types_values)
+            end if
           end if
 !         xyz positions are given in Angstrom and velocities are given in Angstrom/fs. Here we
 !         transform to nm and nm/ps, which are Gromacs units
@@ -202,6 +215,9 @@ subroutine read_trajectory(n, natoms, tau, L, mode, positions, velocities, estim
             read(crap,*) mass_label
             species(j) = mass_label
             call get_mass(mass_label, m(j), nmasses, mass_types, mass_types_values)
+            if( vacuum )then
+              call get_mass(mass_label, radii(j), nmasses, mass_types, radii_types_values)
+            end if
           end if
           x(j) = positions(j,1,i)
           y(j) = positions(j,2,i)
@@ -221,11 +237,11 @@ subroutine read_trajectory(n, natoms, tau, L, mode, positions, velocities, estim
 !   Get Voronoi cell volumes every di_volumes time steps
     if( i > 0 .and. mod(i2-n_beg,stride) == 0 )then
       if( i == 1 )then
-        call voronoi_volumes(natoms, L, x, y, z, volumes_temp)
+        call voronoi_volumes(natoms, L, x, y, z, i_vacuum, radii, volumes_temp)
         volumes(1:natoms,j2) = volumes_temp(1:natoms)
         j2 = j2 + 1
       else if( mod(i,di_volumes) == 1 )then
-        call voronoi_volumes(natoms, L, x, y, z, volumes_temp)
+        call voronoi_volumes(natoms, L, x, y, z, i_vacuum, radii, volumes_temp)
         volumes(1:natoms,j2) = volumes_temp(1:natoms)
         j2 = j2 + 1
       end if

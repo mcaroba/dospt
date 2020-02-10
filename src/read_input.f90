@@ -25,7 +25,7 @@ module read_input
 ! Variables for grouping interface
   integer :: ngroups, nmasses
   integer, allocatable :: natoms_in_group(:), atoms_in_group(:,:), atom_belongs_to_group(:)
-  real*8, allocatable :: mass_types_values(:)
+  real*8, allocatable :: mass_types_values(:), radii_types_values(:)
   character*16, allocatable :: mass_types(:)
   real*8, allocatable :: symmetry_number_group(:)
   logical :: check_topology = .true.
@@ -49,7 +49,7 @@ module read_input
 
 ! Volume exclusion
   character*1024 :: exclude_volume_string
-  logical :: exclude_volume_logical = .false.
+  logical :: exclude_volume_logical = .false., vacuum = .false.
   logical, allocatable :: exclude_volume(:)
 
   contains
@@ -130,6 +130,9 @@ module read_input
       else if(keyword=='temperature')then
         backspace(10)
         read(10,*,iostat=iostatus) crap, crap, T
+      else if(keyword=='vacuum')then
+        backspace(10)
+        read(10,*,iostat=iostatus) crap, crap, vacuum
       else if(keyword=='smooth')then
         backspace(10)
         read(10,*,iostat=iostatus) crap, crap, smooth
@@ -571,6 +574,31 @@ subroutine read_topology()
         end if
       end if
     end do
+    allocate( radii_types_values(1:nmasses) )
+    if( vacuum )then
+      write(*,*)'                                       |'
+      write(*,*)'Radii were found for:                  |'
+      write(*,*)'                                       |'
+      write(*,*)'    Element (tag);     Radius (nm)     |'
+      rewind(10)
+      i = 0
+      do while( i < nmasses )
+        read(10,*) keyword_first
+        if( keyword_first /= "#" )then
+          i = i + 1
+          backspace(10)
+          read(10, *, iostat=ios) mass_types(i), crap, radii_types_values(i)
+          if( ios == 0 )then
+            write(*,'(1X,A17,F17.2,A)') trim(mass_types(i)), radii_types_values(i),'     |'
+          else
+            write(*,*)'                                       |'
+            write(*,*)'WARNING: bad value in "masses" file for|  <-- WARNING'
+            write(*,'(1X,A,A17,A)')'this atom type: ', trim(mass_types(i)), '      |'
+            write(*,*)'                                       |'
+          end if
+        end if
+      end do
+    end if
   close(10)
   write(*,*)'                                       |'
   write(*,*)'.......................................|'

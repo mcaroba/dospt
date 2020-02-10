@@ -129,7 +129,8 @@ program DOSPT
   if(execution_error == 0)then
     call allocate_trajectory_arrays()
     call read_trajectory(n, natoms, tau, L, mode, positions, velocities, estimate_vel, error, &
-                         m, nmasses, mass_types, mass_types_values, volumes, volumes_temp, species, di_volumes)
+                         m, nmasses, mass_types, mass_types_values, volumes, volumes_temp, species, &
+                         di_volumes, vacuum, radii_types_values )
     if(error)then
       execution_error = 97
     end if
