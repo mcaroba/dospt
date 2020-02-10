@@ -6,7 +6,9 @@ cd src
 # This compiles dfftpack
 #
 cd dfftpack
+if [ "$1" != "skip_libraries" ]; then
 make
+fi
 cd ../
 #
 ########################################################################
@@ -17,8 +19,10 @@ cd ../
 # This compiles and locally installs Voro++
 #
 cd voro++/voro++-0.4.6
+if [ "$1" != "skip_libraries" ]; then
 make
 make install
+fi
 cd ../../
 #
 ########################################################################
@@ -61,6 +65,7 @@ libs="$otherlibs $dfftlibs $vorolibs"
 # Flags
 #
 flags="-fopenmp -std=legacy"
+#flags="$flags -Ofast"
 #
 ########################################################################
 
