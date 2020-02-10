@@ -12,7 +12,7 @@ program DOSPT
 !    .MMM . MMMM=..MMM ..MMM7 ..  ..8MMM..MMM ...........MMM.....    !
 !    MMMMMMMMMM. .. MMMMMMM   MMMMMMMMD...MMM ..........MMM=....     !
 !                                                                    !
-!                          DoSPT v0.2.1                              !
+!                          DoSPT v0.2.2                              !
 !                                                                    !
 !                        http://dospt.org                            !
 !                                                                    !
@@ -48,7 +48,7 @@ program DOSPT
 !                     of Lennard-Jones fluids"                       !
 !                 J. Chem. Phys. 119, 11792 (2003)                   !
 !                                                                    !
-!!!        Distribution last updated on 03 January 2018            !!!
+!!!        Distribution last updated on 10 February 2020           !!!
 !!!!!                                                            !!!!!
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
