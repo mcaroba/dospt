@@ -200,8 +200,21 @@ subroutine dof_partition()
 !       Ideal rotational diffusion coefficient -> D_rot_ideal
         call get_ideal_rotational_diffusivity(sigma_supergroup(j,k), T, mass_supergroup(j), &
                                               ngroups_in_supergroup_eff(j), volume_supergroup(j), D_ideal, D_rot_ideal)
-        D_rot_ideal = D_rot_ideal / 9.d0 * ( eig_supergroup(j,1) + eig_supergroup(j,2) + eig_supergroup(j,3) ) * &
-                    ( 1.d0/eig_supergroup(j,1) + 1.d0/eig_supergroup(j,2) + 1.d0/eig_supergroup(j,3) )
+!       The ratios between temperature and rotational temperatures are used to check whether the
+!       molecules are linear or not
+        temp(1:3) = conv4 * T / h**2.d0 * 8.d0 * pi**2.d0 * kB * eig_supergroup(j,1:3)
+        if( temp(1) < 1.d0 )then
+!         We have a monatomic particle
+          f_supergroup(j, k) = 0.d0
+          cycle
+        else if( temp(3) < 1.d0 )then
+!         We have a linear molecule 
+          D_rot_ideal = D_rot_ideal / 4.d0 * ( eig_supergroup(j,1) + eig_supergroup(j,2) ) * &
+                      ( 1.d0/eig_supergroup(j,1) + 1.d0/eig_supergroup(j,2) )
+        else
+          D_rot_ideal = D_rot_ideal / 9.d0 * ( eig_supergroup(j,1) + eig_supergroup(j,2) + eig_supergroup(j,3) ) * &
+                      ( 1.d0/eig_supergroup(j,1) + 1.d0/eig_supergroup(j,2) + 1.d0/eig_supergroup(j,3) )
+        end if
 !       Fluidicity
         if( degf_supergroup(j,k) < 1.d-10 )then
           f_supergroup(j, k) = 0.d0

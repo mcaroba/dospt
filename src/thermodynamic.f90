@@ -19,6 +19,8 @@ module thermodynamic
 ! Binary entropy of mixing variables
   real*8 :: v_dash, alpha, beta, m_frac
 
+  logical :: is_linear
+
   contains
 
 subroutine get_entropy()
@@ -352,17 +354,29 @@ temp(1) = volume_supergroup(j)
         do j2 = 1, ngroups_in_supergroup(j)
 !         3 translational DoF per group in this supergroup
           temp(1) = temp(1) + weight_group(group_in_supergroup(j,j2))*3.d0
-!         Total number of DoF for this group (takes constrains into account)
-          temp(4) = weight_group(group_in_supergroup(j,j2))* &
-                    dot_product(degf_group(group_in_supergroup(j,j2),1:3), (/1.d0, 1.d0, 1.d0/))
-!         For diatomic molecules
-          if(natoms_in_group(group_in_supergroup(j,j2)) == 2)then
+!         Total number of DoF for this group (takes constraints into account)
+          temp(4) = weight_group(group_in_supergroup(j,j2)) * ( dfloat( 3*natoms_in_group(group_in_supergroup(j,j2)) ) &
+                                                                - nconstraints_in_group(group_in_supergroup(j,j2)) )
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!         WARNING: I should add some code so that if the value
+!         below is significantly different from the value commented out below, there should be a
+!         warning message
+!         This is the old way to handle constraints, which assumes that the total DoFs for the
+!         group, computed from the intergal of the DoS, is very close to the expected number
+!          temp(4) = weight_group(group_in_supergroup(j,j2))* &
+!                    dot_product(degf_group(group_in_supergroup(j,j2),1:3), (/1.d0, 1.d0, 1.d0/))
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!         For diatomic or linear molecules
+!         If the temperature to rotational temperature ratio is less than 1. for the third moment
+!         of inertia, we assume this molecule is linear, even if it has more than 2 atoms
+          is_linear = ( conv4 * T / h**2.d0 * 8.d0 * pi**2.d0 * kB * eig_supergroup(j,3) < 1.d0 )
+          if( natoms_in_group(group_in_supergroup(j,j2)) == 2 .or. is_linear )then
 !           We add 2 rotational DoF per linear molecule
             temp(2) = temp(2) + weight_group(group_in_supergroup(j,j2))*2.d0
 !           We add the rest as vibrational DoF (if the bond is constrained this is correctly zero)
             temp(3) = temp(3) + temp(4) - weight_group(group_in_supergroup(j,j2))*5.d0
-!         For molecules with 3 or more atoms
-          else if(natoms_in_group(group_in_supergroup(j,j2)) > 2)then
+!         For molecules with 3 or more atoms that are not linear
+          else if( natoms_in_group(group_in_supergroup(j,j2)) > 2 )then
             temp(2) = temp(2) + weight_group(group_in_supergroup(j,j2))*3.d0
             temp(3) = temp(3) + temp(4) - weight_group(group_in_supergroup(j,j2))*6.d0
           end if

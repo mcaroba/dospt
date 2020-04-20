@@ -23,7 +23,8 @@ subroutine sort_out_topology()
                           group_in_supergroup, ngroups_in_supergroup, group_belongs_to_supergroup, &
                           nspecies_in_topology, topology_in_supergroup, neach_species_in_topology, &
                           ntopology_types, symmetry_number_of_topology, species_in_topology, &
-                          nbond_types, bond_type, bond_cutoffs, birth_time, death_time, topology_has_changed)
+                          nbond_types, bond_type, bond_cutoffs, birth_time, death_time, topology_has_changed, &
+                          nconstraints_in_group, nconstraints_of_topology )
   else
     allocate( birth_time(1:ngroups) )
     allocate( death_time(1:ngroups) )
@@ -67,7 +68,8 @@ subroutine rebuild_topology(nsteps, dstep, natoms, ngroups, nsupergroups, L_cell
            group_in_supergroup, ngroups_in_supergroup, group_belongs_to_supergroup, &
            nspecies_in_topology, topology_in_supergroup, neach_species_in_topology, &
            ntopology_types, symmetry_number_of_topology, species_in_topology, &
-           nbond_types, bond_type, bond_cutoffs, birth_time, death_time, topology_has_changed)
+           nbond_types, bond_type, bond_cutoffs, birth_time, death_time, topology_has_changed, &
+           nconstraints_in_group, nconstraints_of_topology )
 
   implicit none
 
@@ -75,6 +77,7 @@ subroutine rebuild_topology(nsteps, dstep, natoms, ngroups, nsupergroups, L_cell
   integer :: nsteps, natoms, ngroups, nbond_types, nsupergroups, dstep
   real*8 :: L_cell(1:3), bond_cutoffs(:,:), update_bar
   real*8, allocatable :: symmetry_number_group(:)
+  real*8, allocatable :: nconstraints_in_group(:)
   real*4 :: positions(:,:,:)
   character*16 :: species(:), bond_type(:,:)
   integer, allocatable :: atoms_in_group(:,:), natoms_in_group(:)
@@ -83,6 +86,7 @@ subroutine rebuild_topology(nsteps, dstep, natoms, ngroups, nsupergroups, L_cell
   integer :: nspecies_in_topology(:), topology_in_supergroup(:), neach_species_in_topology(:,:)
   integer :: ntopology_types
   real*8 :: symmetry_number_of_topology(:)
+  real*8 :: nconstraints_of_topology(:)
   character*16 :: species_in_topology(:,:)
   logical :: topology_has_changed
 
@@ -95,6 +99,7 @@ subroutine rebuild_topology(nsteps, dstep, natoms, ngroups, nsupergroups, L_cell
   integer, allocatable :: atom_belongs_to_new_group(:), natoms_in_new_group(:)
   real*8 :: d
   real*8, allocatable :: symmetry_number_group_temp(:)
+  real*8, allocatable :: nconstraints_in_group_temp(:)
   character*32 :: temp_char
   integer, allocatable :: neach_species_in_topology_temp(:,:), group_belongs_to_supergroup(:), ngroups_in_supergroup_temp(:), &
                           group_in_supergroup_temp(:,:), group_belongs_to_supergroup_temp(:), birth_time_temp(:), &
@@ -118,6 +123,8 @@ subroutine rebuild_topology(nsteps, dstep, natoms, ngroups, nsupergroups, L_cell
   allocate( atoms_in_group_temp(1:1,1:1) )
   allocate( natoms_in_group_temp(1:1) )
   allocate( symmetry_number_group_temp(1:1) )
+  allocate( nconstraints_in_group_temp(1:1) )
+  nconstraints_in_group_temp = 0.d0
   allocate( group_still_exists_temp(1:1) )
   allocate( birth_time_temp(1:1) )
   allocate( death_time_temp(1:1) )
@@ -307,6 +314,7 @@ subroutine rebuild_topology(nsteps, dstep, natoms, ngroups, nsupergroups, L_cell
       deallocate( atoms_in_group_temp )
       deallocate( natoms_in_group_temp )
       deallocate( symmetry_number_group_temp )
+      deallocate( nconstraints_in_group_temp )
       deallocate( group_still_exists_temp )
       deallocate( birth_time_temp )
       deallocate( death_time_temp )
@@ -317,6 +325,9 @@ subroutine rebuild_topology(nsteps, dstep, natoms, ngroups, nsupergroups, L_cell
       allocate( symmetry_number_group_temp(1:ngroups+new_groups) )
 !     If the symmetry number is not provided we assume sigma = 1
       symmetry_number_group_temp(1:ngroups+new_groups) = 1.d0
+      allocate( nconstraints_in_group_temp(1:ngroups+new_groups) )
+!     If the number of constraints is not provided we set it to zero
+      nconstraints_in_group_temp(1:ngroups+new_groups) = 0.d0
       allocate( group_still_exists_temp(1:ngroups+new_groups) )
       allocate( birth_time_temp(1:ngroups+new_groups) )
       allocate( death_time_temp(1:ngroups+new_groups) )
@@ -326,6 +337,7 @@ subroutine rebuild_topology(nsteps, dstep, natoms, ngroups, nsupergroups, L_cell
       atoms_in_group_temp(1:ngroups,1:i) = atoms_in_group(1:ngroups,1:i)
       natoms_in_group_temp(1:ngroups) = natoms_in_group(1:ngroups)
       symmetry_number_group_temp(1:ngroups) = symmetry_number_group(1:ngroups)
+      nconstraints_in_group_temp(1:ngroups) = nconstraints_in_group(1:ngroups)
       group_still_exists_temp(1:ngroups) = group_still_exists(1:ngroups)
       death_time_temp(1:ngroups) = death_time(1:ngroups)
       birth_time_temp(1:ngroups) = birth_time(1:ngroups)
@@ -355,6 +367,7 @@ subroutine rebuild_topology(nsteps, dstep, natoms, ngroups, nsupergroups, L_cell
       deallocate( atoms_in_group )
       deallocate( natoms_in_group )
       deallocate( symmetry_number_group )
+      deallocate( nconstraints_in_group )
       deallocate( group_still_exists )
       deallocate( death_time )
       deallocate( birth_time )
@@ -362,12 +375,14 @@ subroutine rebuild_topology(nsteps, dstep, natoms, ngroups, nsupergroups, L_cell
       allocate( atoms_in_group(1:ngroups,1:j2) )
       allocate( natoms_in_group(1:ngroups) )
       allocate( symmetry_number_group(1:ngroups) )
+      allocate( nconstraints_in_group(1:ngroups) )
       allocate( group_still_exists(1:ngroups) )
       allocate( death_time(1:ngroups) )
       allocate( birth_time(1:ngroups) )
       atoms_in_group = atoms_in_group_temp
       natoms_in_group = natoms_in_group_temp
       symmetry_number_group = symmetry_number_group_temp
+      nconstraints_in_group = nconstraints_in_group_temp
       group_still_exists = group_still_exists_temp
       death_time = death_time_temp
       birth_time = birth_time_temp
@@ -430,6 +445,7 @@ subroutine rebuild_topology(nsteps, dstep, natoms, ngroups, nsupergroups, L_cell
           if( topology_match )then
             group_belongs_to_supergroup(i) = topology_in_supergroup(k)
             symmetry_number_group(i) = symmetry_number_of_topology(k)
+            nconstraints_in_group(i) = nconstraints_of_topology(k)
             ngroups_in_supergroup(group_belongs_to_supergroup(i)) = ngroups_in_supergroup(group_belongs_to_supergroup(i)) + 1
             group_in_supergroup(group_belongs_to_supergroup(i), ngroups_in_supergroup(group_belongs_to_supergroup(i))) = i
             exit
@@ -448,7 +464,7 @@ subroutine rebuild_topology(nsteps, dstep, natoms, ngroups, nsupergroups, L_cell
       open(unit=10, file="topol/groups." // trim(adjustl(temp_char)), status="unknown")
       write(10,*) natoms, ngroups
       do i=1,ngroups
-        write(10,*) natoms_in_group(i), symmetry_number_group(i), group_still_exists(i)
+        write(10,*) natoms_in_group(i), symmetry_number_group(i), group_still_exists(i), nconstraints_in_group(i)
         write(10,*) ( atoms_in_group(i,j), j = 1, natoms_in_group(i) )
       end do
       close(10)

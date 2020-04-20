@@ -29,6 +29,7 @@ module calc_dos
   real*8, allocatable :: eig_group(:,:), symmetry_number_supergroup(:), mass_group(:), eig_supergroup(:,:)
   real*8, allocatable :: Ssupergroup(:,:,:), mass_supergroup(:), volume_supergroup(:)
   real*8, allocatable :: natoms_in_supergroup(:), ngroups_in_supergroup_eff(:)
+  real*8, allocatable :: nconstraints_in_supergroup(:)
 
   real*4, allocatable :: v_rot(:,:,:), v_cm(:,:,:), v_vib(:,:,:)
   real*4, allocatable :: w(:,:,:), eig_group_inst(:,:,:), rxv(:,:,:), dist(:,:), e_kin_tot(:), e_kin(:,:)
@@ -408,6 +409,7 @@ subroutine get_dos()
     allocate( natoms_in_supergroup(1:nsupergroups) )
     allocate( ngroups_in_supergroup_eff(1:nsupergroups) )
     allocate( eig_supergroup(1:nsupergroups,1:3) )
+    allocate( nconstraints_in_supergroup(1:nsupergroups) )
     Ssupergroup = 0.d0
     mass_supergroup = 0.d0
     symmetry_number_supergroup = 0.d0
@@ -416,6 +418,7 @@ subroutine get_dos()
     eig_supergroup = 0.d0
     ngroups_in_supergroup_eff = 0.d0
     ngroups_eff = 0.d0
+    nconstraints_in_supergroup = 0.d0
     do j=1,nsupergroups
       do j2=1,ngroups_in_supergroup(j)
         ngroups_in_supergroup_eff(j) = ngroups_in_supergroup_eff(j) + weight_group(group_in_supergroup(j,j2))
@@ -434,6 +437,12 @@ subroutine get_dos()
                                volume_group(group_in_supergroup(j,j2))
         natoms_in_supergroup(j) = natoms_in_supergroup(j) + weight_group(group_in_supergroup(j,j2))* &
                                   dfloat(natoms_in_group(group_in_supergroup(j,j2)))
+        if( constraints )then
+!         This is the total number of constraints in the supergroup, not the average per group
+!         Each constraint removes one vibrationa degree of freedom
+          nconstraints_in_supergroup(j) = nconstraints_in_supergroup(j) + weight_group(group_in_supergroup(j,j2))* &
+                                          nconstraints_in_group(group_in_supergroup(j,j2))
+        end if
         do k2=1,3
           Ssupergroup(j,1,k2) = Ssupergroup(j,1,k2) + weight_group(group_in_supergroup(j,j2))* &
                                 Sgroup(group_in_supergroup(j,j2),1,k2)
@@ -649,8 +658,10 @@ subroutine get_decomposed_velocities(m, r, v, natoms_in_group, v_rot, v_cm, v_vi
   real*8 :: v_rot(:,:), v_cm(:), v_vib(:,:), temp, L(1:3) = 0.d0
   real*8 :: Ine(1:3,1:3) = 0.d0, I_inv(1:3,1:3), CM(1:3) = 0.d0
   real*8 :: delta(1:3,1:3) = 0.d0, w(1:3) = 0.d0, eig(:)
-  real*8 :: temp1, temp2
+  real*8 :: temp1, temp2, Ine_temp1(1:3,1:3), Ine_temp2(1:3,1:3), Ine_temp3(1:3,1:3)
   real*8 :: w_group(:), rxv_group(:,:), dist_group(:)
+  real*8 :: paxis3(1:3), r_proj(1:3)
+  logical :: is_linear
 
   v_cm = 0.d0
   v_rot = 0.d0
@@ -689,6 +700,7 @@ subroutine get_decomposed_velocities(m, r, v, natoms_in_group, v_rot, v_cm, v_vi
     w_group = 0.d0
     rxv_group = 0.d0
     dist_group = 1.d0
+    eig = 0.d0
     return
   end if
 
@@ -711,7 +723,7 @@ subroutine get_decomposed_velocities(m, r, v, natoms_in_group, v_rot, v_cm, v_vi
 ! such a case and we need to do something else. Here we think of a basis where
 ! u1 is a unit vector along the direction connecting both atoms, and u2, u3
 ! lie in a plane perpendicular to u1. Vibrational velocities are the u1 components
-! and rotational velocities are given as the instantaenous angular velocities
+! and rotational velocities are given as the instantaneous angular velocities
 ! around u2 and u3
   if(natoms_in_group == 2)then
 !   w is the same if we use r1, v1 or r2, v2 because we're in the CM frame
@@ -726,6 +738,13 @@ subroutine get_decomposed_velocities(m, r, v, natoms_in_group, v_rot, v_cm, v_vi
 !   Vibrational velocity
     v_vib(1,1:3) = v(1,1:3) - v_rot(1,1:3)
     v_vib(2,1:3) = v(2,1:3) - v_rot(2,1:3)
+!   Tensor of inertia treatment in 2D
+    eig(1) = 0.d0
+    do k = 1, natoms_in_group
+      eig(1) = eig(1) + m(k) * ( r(k,1)**2 + r(k,2)**2 + r(k,3)**2 )
+    end do
+    eig(2) = eig(1)
+    eig(3) = 0.d0
     return
   end if
 
@@ -756,27 +775,73 @@ subroutine get_decomposed_velocities(m, r, v, natoms_in_group, v_rot, v_cm, v_vi
   eig = 0.d0
   call get_eigenvalues_3x3(Ine,eig)
 
-! Angular momentum (velocities and position wrt CM)
-  L=0.d0
-  rxv_group = 0.d0
-  do k = 1, natoms_in_group
-    rxv_group(k,1) = r(k,2)*v(k,3) - r(k,3)*v(k,2)
-    rxv_group(k,2) = - r(k,1)*v(k,3) + r(k,3)*v(k,1)
-    rxv_group(k,3) = r(k,1)*v(k,2) - r(k,2)*v(k,1)
-    L(1) = L(1) + m(k) * rxv_group(k,1)
-    L(2) = L(2) + m(k) * rxv_group(k,2)
-    L(3) = L(3) + m(k) * rxv_group(k,3)
-  end do
-
-! Angular velocity
-  w = 0.d0
-  do i = 1, 3
-    do j = 1, 3
-      w(i) = w(i) + I_inv(i,j) * L(j)
+! If the group has more than 3 atoms but is linear, then one of the principal moments
+! of inertia will be very small and it will dominate the angular velocity decomposition
+! That result is incorrect and it needs to be corrected. We follow this strategy: we
+! compute the direction of the principal axis of inertia for the smallest principal
+! moment, then we compute the angular velocities directly by projecting the atomic position
+! vectors onto that axis and then getting the angular velocity from the cross product of
+! the projection times the atomic velocity. We avoid inverting the moment of inertia
+! tensor which is nearly singular.
+!
+! This is the condition for considering a group linear. The same condition is used elsewhere
+! in the code
+  is_linear = (conv4 * T / h**2.d0 * 8.d0 * pi**2.d0 * kB * eig(3) < 1.d0)
+  if( is_linear )then
+    do i = 1, 3
+      do j = 1, 3
+        Ine_temp1(i,j) = Ine(i,j) - eig(1) * delta(i,j)
+        Ine_temp2(i,j) = Ine(i,j) - eig(2) * delta(i,j)
+      end do
     end do
-  end do
-  w_group = w
+    Ine_temp3 = matmul(Ine_temp1, Ine_temp2)
+    paxis3(1:3) = Ine_temp3(1:3, 1) / dsqrt(dot_product(Ine_temp3(1:3, 1), Ine_temp3(1:3, 1)))
+    rxv_group = 0.d0
+!   Angular momentum (velocities and position wrt CM)
+    L=0.d0
+    rxv_group = 0.d0
+    do k = 1, natoms_in_group
+!     This is different compared  to the general case
+      r_proj(1:3) = dot_product(r(k,1:3), paxis3(1:3)) * paxis3(1:3)
+!
+      rxv_group(k,1) = r_proj(2)*v(k,3) - r_proj(3)*v(k,2)
+      rxv_group(k,2) = - r_proj(1)*v(k,3) + r_proj(3)*v(k,1)
+      rxv_group(k,3) = r_proj(1)*v(k,2) - r_proj(2)*v(k,1)
+      L(1) = L(1) + m(k) * rxv_group(k,1)
+      L(2) = L(2) + m(k) * rxv_group(k,2)
+      L(3) = L(3) + m(k) * rxv_group(k,3)
+    end do
+!   Now the angular momentum is entirely perpendicular to the high symmetry axis.
+!   We approximate the inverse of the inertia tensor by the inverse of the (scalar)
+!   two largest principal moments of inertia (that is, their average):
+    w = 0.d0
+    do i = 1, 3
+      w(i) = w(i) + L(i) / (eig(1)+eig(2)) * 2.d0
+    end do
+    w_group = w
+  else
+!   Angular momentum (velocities and position wrt CM)
+    L=0.d0
+    rxv_group = 0.d0
+    do k = 1, natoms_in_group
+      rxv_group(k,1) = r(k,2)*v(k,3) - r(k,3)*v(k,2)
+      rxv_group(k,2) = - r(k,1)*v(k,3) + r(k,3)*v(k,1)
+      rxv_group(k,3) = r(k,1)*v(k,2) - r(k,2)*v(k,1)
+      L(1) = L(1) + m(k) * rxv_group(k,1)
+      L(2) = L(2) + m(k) * rxv_group(k,2)
+      L(3) = L(3) + m(k) * rxv_group(k,3)
+    end do
+!   Angular velocity
+    w = 0.d0
+    do i = 1, 3
+      do j = 1, 3
+        w(i) = w(i) + I_inv(i,j) * L(j)
+      end do
+    end do
+    w_group = w
+  end if
 
+! Now this is common to both linear and 3D molecules
 ! Rotational velocity of each atom
   do k = 1, natoms_in_group
     v_rot(k,1) = w(2)*r(k,3) - w(3)*r(k,2)

@@ -19,6 +19,7 @@ module read_input
   real*8 :: L(1:3) = 0., V = 0., tau = 0., T = 1.d-10, twobykT, sigma_nu = 0.d0
   logical :: smooth = .false., estimate_vel = .false., renormalize = .false., vibrational_gas = .false.
   logical :: f_opt = .true., f_rot_opt = .true., write_dos = .true., print_mi = .false.
+  logical :: constraints = .false.
   character*3 :: smixture = "mol", hs_formalism
   integer :: natoms, n = 0, iostatus, execution_error = 0, nrebuild_top = 1, n_beg = 1, stride = 1
 
@@ -27,7 +28,7 @@ module read_input
   integer, allocatable :: natoms_in_group(:), atoms_in_group(:,:), atom_belongs_to_group(:)
   real*8, allocatable :: mass_types_values(:), radii_types_values(:)
   character*16, allocatable :: mass_types(:)
-  real*8, allocatable :: symmetry_number_group(:)
+  real*8, allocatable :: symmetry_number_group(:), nconstraints_in_group(:)
   logical :: check_topology = .true.
 
 ! Supergroup interface
@@ -44,7 +45,7 @@ module read_input
   real*8, allocatable :: bond_cutoffs(:,:)
   integer, allocatable :: nspecies_in_topology(:), topology_in_supergroup(:), neach_species_in_topology(:,:)
   integer :: ntopology_types
-  real*8, allocatable :: symmetry_number_of_topology(:)
+  real*8, allocatable :: symmetry_number_of_topology(:), nconstraints_of_topology(:)
   character*16, allocatable :: species_in_topology(:,:)
 
 ! Volume exclusion
@@ -72,14 +73,14 @@ module read_input
   write(*,*)'                                                            |'
   write(*,*)'                    You are using the                       |'
   write(*,*)'    Density of States (two-) Phase Thermodynamics, v0.2     |'
-  write(*,*)'                   DoSPT v0.2.2-alpha                       |'
+  write(*,*)'                   DoSPT v0.2.3-alpha                       |'
   write(*,*)'                    http://dospt.org                        |'
   write(*,*)'                          ...                               |'
   write(*,*)'                Written by Miguel A. Caro                   |'
   write(*,*)'                          ...                               |'
   write(*,*)'                    mcaroba@gmail.com                       |'
   write(*,*)'                          ...                               |'
-  write(*,*)'                 Last updated Feb 2020                      |'
+  write(*,*)'                 Last updated Apr 2020                      |'
   write(*,*)'                                                            |'
   write(*,*)'....................................... ____________________/'
 
@@ -133,6 +134,9 @@ module read_input
       else if(keyword=='vacuum')then
         backspace(10)
         read(10,*,iostat=iostatus) crap, crap, vacuum
+      else if(keyword=='constraints')then
+        backspace(10)
+        read(10,*,iostat=iostatus) crap, crap, constraints
       else if(keyword=='smooth')then
         backspace(10)
         read(10,*,iostat=iostatus) crap, crap, smooth
@@ -279,10 +283,19 @@ subroutine read_groups()
     allocate( natoms_in_group(1:ngroups) )
     allocate( symmetry_number_group(1:ngroups) )
     allocate( atom_belongs_to_group(1:natoms) )
-    do i=1,ngroups
-      read(10,*) natoms_in_group(i), symmetry_number_group(i)
-      read(10,*)
-    end do
+    allocate( nconstraints_in_group(1:ngroups) )
+    nconstraints_in_group = 0.d0
+    if( constraints )then
+      do i=1,ngroups
+        read(10,*) natoms_in_group(i), symmetry_number_group(i), nconstraints_in_group(i)
+        read(10,*)
+      end do
+    else
+      do i=1,ngroups
+        read(10,*) natoms_in_group(i), symmetry_number_group(i)
+        read(10,*)
+      end do
+    end if
 ! Identify largest group for memory allocation purposes
     j=0
     do i=1,ngroups
@@ -452,6 +465,8 @@ subroutine read_topology()
       allocate( nspecies_in_topology(1:ntopology_types) )
       allocate( symmetry_number_of_topology(1:ntopology_types) )
       allocate( topology_in_supergroup(1:ntopology_types) )
+      allocate( nconstraints_of_topology(1:ntopology_types) )
+      nconstraints_of_topology = 0.d0
       rewind(10)
 !     k is the largest number of different species in a group; for memory allocation purposes
       k = 0
@@ -497,8 +512,13 @@ subroutine read_topology()
             read(10,*) keyword, (keyword, k = 1, 2*(j-1)), species_in_topology(i, j), neach_species_in_topology(i, j)
             backspace(10)
           end do
-          read(10,*) (keyword, k = 1, 2*nspecies_in_topology(i) + 1), keyword, symmetry_number_of_topology(i), &
-                     keyword, topology_in_supergroup(i)
+          if( constraints )then
+            read(10,*) (keyword, k = 1, 2*nspecies_in_topology(i) + 1), keyword, symmetry_number_of_topology(i), &
+                       keyword, topology_in_supergroup(i), keyword, nconstraints_of_topology(i)
+          else
+            read(10,*) (keyword, k = 1, 2*nspecies_in_topology(i) + 1), keyword, symmetry_number_of_topology(i), &
+                       keyword, topology_in_supergroup(i)
+          end if
         end if
       end do
 !     Increase number of supergroups
