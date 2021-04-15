@@ -101,7 +101,7 @@ subroutine  factorize(n)
 
 ! We preset the array sizes to handle 100 different factors which
 ! should be more than enough for any practical purpose
-  integer :: factor(1:100) = 0, factor_exponent(1:100) = 0
+  integer :: factor(0:100) = 0, factor_exponent(1:100) = 0
   integer :: input, divisor, count, n_diff_factors = 0, i, spaces, n
   character*64 :: temp(4), format
 
@@ -127,7 +127,7 @@ subroutine  factorize(n)
     do
       if (mod(input, divisor) /= 0 .or. input == 1)  exit
       count = count + 1
-      if(divisor /= factor(n_diff_factors) )then
+      if( divisor /= factor(n_diff_factors) )then
         n_diff_factors = n_diff_factors + 1
         factor(n_diff_factors) = divisor
       end if

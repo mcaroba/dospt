@@ -204,17 +204,33 @@ subroutine get_omega(this_group, ngroups, natoms_in_group, volume_group, sigma_g
 
   real*8 :: omega
   real*8 :: volume_group(:), sigma_group(:), mass_group(:)
-  integer :: ngroups, j, this_group
+  integer :: ngroups, j, j2, this_group
   real*8 :: natoms_in_group(:)
   character*1 :: mode
-  logical :: exclude_volume(:)
+  logical :: exclude_volume(:), exclude_default
+
+  if( ngroups > size(exclude_volume) )then
+    exclude_default = .true.
+  else
+    exclude_default = .false.
+  end if
 
   omega = 0.d0
 
-  if( .not. exclude_volume(this_group) )then
+  if( exclude_default )then
+    j2 = 1
+  else
+    j2 = this_group
+  end if
+  if( .not. exclude_volume(j2) )then
     if( mode == "v" )then
       do j=1, ngroups
-        if( .not. exclude_volume(j) )then
+        if( exclude_default )then
+          j2 = 1
+        else
+          j2 = j
+        end if
+        if( .not. exclude_volume(j2) )then
           omega = omega + 1.d0/4.d0/dsqrt(2.d0) * natoms_in_group(j) / natoms_in_group(this_group) * &
                   (1.d0 + (volume_group(j)/volume_group(this_group))**(1.d0/3.d0))**2.d0 * &
                   dsqrt(1.d0 + mass_group(this_group)/mass_group(j))
@@ -222,7 +238,12 @@ subroutine get_omega(this_group, ngroups, natoms_in_group, volume_group, sigma_g
       end do
     else if( mode == "s" )then
       do j=1, ngroups
-        if( .not. exclude_volume(j) )then
+        if( exclude_default )then
+          j2 = 1
+        else
+          j2 = j
+        end if
+        if( .not. exclude_volume(j2) )then
           omega = omega + 1.d0/4.d0/dsqrt(2.d0) * natoms_in_group(j) / natoms_in_group(this_group) * &
                   (1.d0 + sigma_group(j)/sigma_group(this_group))**2.d0 * &
                   dsqrt(1.d0 + mass_group(this_group)/mass_group(j))
